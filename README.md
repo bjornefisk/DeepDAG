@@ -1,0 +1,2 @@
+## Why? ## 
+This project addresses the problem of noisy log anomaly detection by leveraging self-supervised sequence embeddings, enabling accurate detection with minimal labeled data while improving robustness to unseen patterns.
