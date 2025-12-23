@@ -105,6 +105,13 @@ func (g *Graph) Validate() error {
 		return err
 	}
 
+	// 4. Max Depth Enforcement
+	// We limit the graph to 3 layers to prevent complex, uncontrollable chains in this MVP.
+	const MaxDepth = 3
+	if err := checkDepth(g.Nodes, adj, MaxDepth); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -141,4 +148,36 @@ func hasCycle(nodeID string, adj map[string][]string, visited, stack map[string]
 
 	stack[nodeID] = false
 	return false
+}
+
+// checkDepth verifies that the longest path in the graph does not exceed the limit.
+// It assumes the graph is acyclic (checkCycles must run first).
+func checkDepth(nodes []Node, adj map[string][]string, limit int) error {
+	memo := make(map[string]int)
+
+	var getDepth func(string) int
+	getDepth = func(id string) int {
+		if d, ok := memo[id]; ok {
+			return d
+		}
+		
+		maxChildDepth := 0
+		for _, neighbor := range adj[id] {
+			d := getDepth(neighbor)
+			if d > maxChildDepth {
+				maxChildDepth = d
+			}
+		}
+		
+		depth := 1 + maxChildDepth
+		memo[id] = depth
+		return depth
+	}
+
+	for _, n := range nodes {
+		if d := getDepth(n.ID); d > limit {
+			return fmt.Errorf("graph exceeds max depth of %d layers", limit)
+		}
+	}
+	return nil
 }

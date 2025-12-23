@@ -109,6 +109,23 @@ func TestGraph_Validate(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "Exceeds Max Depth (4 layers)",
+			graph: Graph{
+				Nodes: []Node{
+					{ID: "A", Type: "task"},
+					{ID: "B", Type: "task"},
+					{ID: "C", Type: "task"},
+					{ID: "D", Type: "task"},
+				},
+				Edges: []Edge{
+					{From: "A", To: "B"},
+					{From: "B", To: "C"},
+					{From: "C", To: "D"},
+				},
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
