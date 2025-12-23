@@ -3,8 +3,6 @@ package generator
 import (
 	"fmt"
 
-	"github.com/google/uuid"
-
 	"hdrp/internal/dag"
 	"hdrp/internal/intent"
 )
@@ -44,7 +42,9 @@ func (g *TemplateGenerator) Generate(obj *intent.Objective) (*dag.Graph, error) 
 	}
 
 	// Hydrate the blueprint into a unique graph instance
-	graphID := fmt.Sprintf("graph-%s", uuid.New().String()[:8])
+	// DETERMINISTIC ID: graph ID is derived directly from the objective ID.
+	graphID := fmt.Sprintf("graph-%s", obj.ID)
+	
 	graph := &dag.Graph{
 		ID:     graphID,
 		Status: dag.StatusCreated,
@@ -55,7 +55,9 @@ func (g *TemplateGenerator) Generate(obj *intent.Objective) (*dag.Graph, error) 
 	// Deep copy nodes and inject context from the objective
 	for i, nodeTmpl := range bp.nodes {
 		n := nodeTmpl // copy
-		n.ID = fmt.Sprintf("%s-%s", nodeTmpl.ID, uuid.New().String()[:6])
+		// DETERMINISTIC NODE ID: {GraphID}-{TemplateNodeID}
+		// Since TemplateNodeID is unique within the blueprint, this is safe.
+		n.ID = fmt.Sprintf("%s-%s", graphID, nodeTmpl.ID)
 		n.Status = dag.StatusCreated
 		
 		// Initialize config if nil

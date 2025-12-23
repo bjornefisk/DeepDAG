@@ -77,9 +77,9 @@ func TestTemplateGenerator_Generate(t *testing.T) {
 				if n.Config["meta_foo"] != "bar" {
 					t.Errorf("Node %s missing injected metadata", n.ID)
 				}
-				// Verify unique IDs (not the template IDs)
-				if !strings.Contains(n.ID, "-") {
-					t.Errorf("Node ID %s appears to be raw template ID, expected UUID suffix", n.ID)
+				// Verify deterministic IDs
+				if !strings.HasPrefix(n.ID, g.ID) {
+					t.Errorf("Node ID %s should be prefixed with Graph ID %s", n.ID, g.ID)
 				}
 			}
 
@@ -99,6 +99,35 @@ func TestTemplateGenerator_Generate(t *testing.T) {
 				t.Errorf("Generated graph failed validation: %v", err)
 			}
 		})
+	}
+}
+
+func TestTemplateGenerator_Determinism(t *testing.T) {
+	gen := NewTemplateGenerator()
+	obj := &intent.Objective{
+		ID:          "fixed-obj-id",
+		Type:        intent.IntentResearch,
+		Description: "Repeatable test",
+	}
+
+	g1, err := gen.Generate(obj)
+	if err != nil {
+		t.Fatalf("First generation failed: %v", err)
+	}
+
+	g2, err := gen.Generate(obj)
+	if err != nil {
+		t.Fatalf("Second generation failed: %v", err)
+	}
+
+	if g1.ID != g2.ID {
+		t.Errorf("Graph IDs mismatch: %s vs %s", g1.ID, g2.ID)
+	}
+
+	for i := range g1.Nodes {
+		if g1.Nodes[i].ID != g2.Nodes[i].ID {
+			t.Errorf("Node ID mismatch at index %d: %s vs %s", i, g1.Nodes[i].ID, g2.Nodes[i].ID)
+		}
 	}
 }
 
