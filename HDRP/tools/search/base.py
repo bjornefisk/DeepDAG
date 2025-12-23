@@ -9,6 +9,9 @@ class SearchProvider(abc.ABC):
     
     Enforces a consistent interface regardless of the underlying API (Google, Bing, Serper, etc.).
     """
+    
+    # Safety cap to prevent context window flooding or excessive API costs
+    HARD_LIMIT_SOURCES = 10
 
     @abc.abstractmethod
     def search(self, query: str, max_results: int = 5) -> SearchResponse:
@@ -16,7 +19,7 @@ class SearchProvider(abc.ABC):
         
         Args:
             query: The search string.
-            max_results: Maximum number of results to return.
+            max_results: Maximum number of results to return. Clamped to HARD_LIMIT_SOURCES (10).
             
         Returns:
             SearchResponse: Structured response containing list of SearchResult.
@@ -25,6 +28,12 @@ class SearchProvider(abc.ABC):
             SearchError: If the downstream API fails or rate limit is exceeded.
         """
         pass
+    
+    def _validate_limit(self, requested: int) -> int:
+        """Clamps the requested limit to the global hard cap."""
+        if requested < 1:
+            return 1
+        return min(requested, self.HARD_LIMIT_SOURCES)
 
     @abc.abstractmethod
     def health_check(self) -> bool:
