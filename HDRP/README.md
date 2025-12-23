@@ -14,3 +14,24 @@ HDRP is a research operating system that performs deep, verifiable research usin
 3. **Critic:** Verifies claims against sources.
 4. **Synthesizer:** Compiles verified info into reports.
 
+## Logging & Traceability
+To ensure reproducibility and support "eval-first" development, HDRP uses a strict structured logging system.
+
+- **Location:** `HDRP/logs/<run_id>.jsonl`
+- **Format:** JSON Lines
+- **Schema:**
+  ```json
+  {
+    "timestamp": "2023-10-27T10:00:00Z",
+    "run_id": "uuid-v4",
+    "component": "component_name", 
+    "event": "event_type",
+    "payload": { ... }
+  }
+  ```
+
+### Key Events
+- `dag_update`: When the Principal adds/modifies nodes.
+- `claim_extracted`: When the Researcher finds a fact.
+- `verification_result`: When the Critic accepts/rejects a claim.
+
