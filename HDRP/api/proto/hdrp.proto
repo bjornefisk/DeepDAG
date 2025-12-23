@@ -5,8 +5,26 @@ package hdrp;
 option go_package = "github.com/deepdag/hdrp/api/gen";
 
 service HDRPService {
+  rpc ParseQuery (ParseQueryRequest) returns (ParseQueryResponse);
   rpc ExecuteGraph (Graph) returns (GraphExecutionResult);
   rpc ValidateGraph (Graph) returns (ValidationResult);
+}
+
+message ParseQueryRequest {
+  string query = 1;
+  map<string, string> context = 2;
+}
+
+message ParseQueryResponse {
+  Objective objective = 1;
+}
+
+message Objective {
+  string id = 1;
+  string description = 2;
+  string intent_type = 3; // e.g., "RESEARCH", "CODE_GEN", "ANALYSIS"
+  repeated string constraints = 4;
+  map<string, string> metadata = 5;
 }
 
 message Graph {
