@@ -35,3 +35,7 @@ To ensure reproducibility and support "eval-first" development, HDRP uses a stri
 - `claim_extracted`: When the Researcher finds a fact.
 - `verification_result`: When the Critic accepts/rejects a claim.
 
+## License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
