@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package hdrp;
+
+option go_package = "github.com/deepdag/hdrp/api/gen";
+
+service HDRPService {
+  rpc ExecuteGraph (Graph) returns (GraphExecutionResult);
+  rpc ValidateGraph (Graph) returns (ValidationResult);
+}
+
+message Graph {
+  string id = 1;
+  repeated Node nodes = 2;
+  repeated Edge edges = 3;
+  map<string, string> metadata = 4;
+}
+
+message Node {
+  string id = 1;
+  string type = 2; // e.g., "researcher", "synthesizer", "critic"
+  map<string, string> config = 3;
+}
+
+message Edge {
+  string from = 1;
+  string to = 2;
+}
+
+message GraphExecutionResult {
+  string graph_id = 1;
+  bool success = 2;
+  string output_artifact_uri = 3;
+  string error_message = 4;
+}
+
+message ValidationResult {
+  bool is_valid = 1;
+  repeated string errors = 2;
+}
