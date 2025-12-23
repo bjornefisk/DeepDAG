@@ -3,5 +3,7 @@ This project addresses the problem of noisy log anomaly detection by leveraging 
 
 ## Success Metrics ##
 Classification → accuracy, F1, ROC-AUC (area under the reciever operating characteristics curve)
+
 Regression → MAE (mean absolute error), RMSE (root squared mean error)
+
 Ranking → MRR (mean reciprocal rank), NDCG (normalized discounted cumulative gain)
