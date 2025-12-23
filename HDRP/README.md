@@ -1,41 +1,5 @@
-# HDRP: Hierarchical Deep Research Planner
+# HDRP Source
 
-## Overview
-HDRP is a research operating system that performs deep, verifiable research using a dynamically expanding Directed Acyclic Graph (DAG). It demonstrates that hierarchical planning and explicit verification outperform flat ReAct loops.
+This directory contains the source code for the **Hierarchical Deep Research Planner**.
 
-## Architecture
-- **Orchestrator (Go):** Handles concurrency, DAG state management, and gRPC communication.
-- **Services (Python):** AI-heavy tasks (Planning, Researching, Critiquing, Synthesizing).
-- **Communication:** gRPC.
-
-## Components
-1. **Principal:** Generates the initial DAG.
-2. **Researcher:** Executes tasks and finds facts.
-3. **Critic:** Verifies claims against sources.
-4. **Synthesizer:** Compiles verified info into reports.
-
-## Logging & Traceability
-To ensure reproducibility and support "eval-first" development, HDRP uses a strict structured logging system.
-
-- **Location:** `HDRP/logs/<run_id>.jsonl`
-- **Format:** JSON Lines
-- **Schema:**
-  ```json
-  {
-    "timestamp": "2023-10-27T10:00:00Z",
-    "run_id": "uuid-v4",
-    "component": "component_name", 
-    "event": "event_type",
-    "payload": { ... }
-  }
-  ```
-
-### Key Events
-- `dag_update`: When the Principal adds/modifies nodes.
-- `claim_extracted`: When the Researcher finds a fact.
-- `verification_result`: When the Critic accepts/rejects a claim.
-
-## License
-
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
+Please refer to the [Root README](../../README.md) for architecture and usage documentation.
