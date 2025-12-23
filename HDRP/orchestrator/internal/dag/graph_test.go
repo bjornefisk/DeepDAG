@@ -126,6 +126,21 @@ func TestGraph_Validate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "Non-Atomic Node Config (Hidden Subgraph)",
+			graph: Graph{
+				Nodes: []Node{
+					{
+						ID:   "complex-task",
+						Type: "agent",
+						Config: map[string]string{
+							"steps": "step1, step2", // Forbidden key
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {

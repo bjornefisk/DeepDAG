@@ -25,6 +25,18 @@ type Node struct {
 	Status Status            `json:"status"`
 }
 
+// Validate ensures the node represents a single, atomic unit of work.
+func (n *Node) Validate() error {
+	forbiddenKeys := []string{"steps", "tasks", "pipeline", "subgraph", "batch"}
+	
+	for _, forbidden := range forbiddenKeys {
+		if _, exists := n.Config[forbidden]; exists {
+			return fmt.Errorf("node '%s' violates atomicity: config key '%s' implies composite/non-atomic behavior", n.ID, forbidden)
+		}
+	}
+	return nil
+}
+
 // Edge represents a directed connection between two nodes.
 type Edge struct {
 	From string `json:"from"`
@@ -74,6 +86,11 @@ func (g *Graph) Validate() error {
 
 		if n.Type == "" {
 			errs = append(errs, fmt.Sprintf("node %s has no type specified", n.ID))
+		}
+
+		// Enforce Node Atomicity
+		if err := n.Validate(); err != nil {
+			errs = append(errs, err.Error())
 		}
 	}
 
