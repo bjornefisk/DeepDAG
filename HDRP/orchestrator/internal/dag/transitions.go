@@ -48,7 +48,9 @@ func isValidTransition(current, target Status) bool {
 
 	switch current {
 	case StatusCreated:
-		return target == StatusPending || target == StatusRunning || target == StatusCancelled
+		return target == StatusPending || target == StatusRunning || target == StatusCancelled || target == StatusBlocked
+	case StatusBlocked:
+		return target == StatusPending || target == StatusCancelled
 	case StatusPending:
 		return target == StatusRunning || target == StatusCancelled || target == StatusFailed
 	case StatusRunning:
@@ -65,6 +67,53 @@ func isValidTransition(current, target Status) bool {
 	default:
 		return false
 	}
+}
+
+// EvaluateReadiness scans the graph and updates node statuses based on dependencies.
+// It moves eligible nodes to PENDING and unsatisfied ones to BLOCKED.
+func (g *Graph) EvaluateReadiness() error {
+	// Build a map of node ID to Status for quick lookup
+	nodeStatus := make(map[string]Status)
+	for _, n := range g.Nodes {
+		nodeStatus[n.ID] = n.Status
+	}
+
+	// Build reverse adjacency list (Child -> Parents)
+	parents := make(map[string][]string)
+	for _, e := range g.Edges {
+		parents[e.To] = append(parents[e.To], e.From)
+	}
+
+	// Iterate and update statuses
+	for _, n := range g.Nodes {
+		// Only evaluate nodes waiting to start
+		if n.Status != StatusCreated && n.Status != StatusBlocked {
+			continue
+		}
+
+		allParentsSucceeded := true
+		for _, parentID := range parents[n.ID] {
+			if nodeStatus[parentID] != StatusSucceeded {
+				allParentsSucceeded = false
+				break
+			}
+		}
+
+		var targetStatus Status
+		if allParentsSucceeded {
+			targetStatus = StatusPending
+		} else {
+			targetStatus = StatusBlocked
+		}
+
+		// Only update if state changes to avoid unnecessary writes/locks in real DB
+		if n.Status != targetStatus {
+			if err := g.SetNodeStatus(n.ID, targetStatus); err != nil {
+				return fmt.Errorf("failed to update node %s readiness: %w", n.ID, err)
+			}
+		}
+	}
+	return nil
 }
 
 // SetStatus is a helper for Graph to update its status and its nodes' statuses if necessary.

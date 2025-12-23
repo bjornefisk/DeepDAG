@@ -12,6 +12,7 @@ const (
 	StatusCreated   Status = "CREATED"
 	StatusPending   Status = "PENDING"
 	StatusRunning   Status = "RUNNING"
+	StatusBlocked   Status = "BLOCKED"
 	StatusSucceeded Status = "SUCCEEDED"
 	StatusFailed    Status = "FAILED"
 	StatusCancelled Status = "CANCELLED"

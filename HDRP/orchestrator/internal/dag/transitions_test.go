@@ -21,6 +21,9 @@ func TestStatusTransitions(t *testing.T) {
 		{"Created to Succeeded", StatusCreated, StatusSucceeded, true}, // Must run first
 		{"Running to Cancelled", StatusRunning, StatusCancelled, false},
 		{"Cancelled to Created", StatusCancelled, StatusCreated, false}, // Reset
+		{"Created to Blocked", StatusCreated, StatusBlocked, false},
+		{"Blocked to Pending", StatusBlocked, StatusPending, false},
+		{"Blocked to Cancelled", StatusBlocked, StatusCancelled, false},
 	}
 
 	for _, tt := range tests {
@@ -35,6 +38,77 @@ func TestStatusTransitions(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEvaluateReadiness(t *testing.T) {
+	t.Run("Simple Dependency Chain", func(t *testing.T) {
+		// A -> B
+		g := &Graph{
+			Nodes: []Node{
+				{ID: "A", Status: StatusCreated},
+				{ID: "B", Status: StatusCreated},
+			},
+			Edges: []Edge{
+				{From: "A", To: "B"},
+			},
+		}
+
+		// Initial Check
+		if err := g.EvaluateReadiness(); err != nil {
+			t.Fatalf("EvaluateReadiness failed: %v", err)
+		}
+		if g.Nodes[0].Status != StatusPending {
+			t.Errorf("Node A should be Pending (no deps), got %s", g.Nodes[0].Status)
+		}
+		if g.Nodes[1].Status != StatusBlocked {
+			t.Errorf("Node B should be Blocked (waiting on A), got %s", g.Nodes[1].Status)
+		}
+
+		// Complete A
+		g.Nodes[0].Status = StatusSucceeded
+		if err := g.EvaluateReadiness(); err != nil {
+			t.Fatalf("EvaluateReadiness failed: %v", err)
+		}
+		if g.Nodes[1].Status != StatusPending {
+			t.Errorf("Node B should be Pending (A finished), got %s", g.Nodes[1].Status)
+		}
+	})
+
+	t.Run("Diamond Dependency", func(t *testing.T) {
+		// A -> B, A -> C, B -> D, C -> D
+		g := &Graph{
+			Nodes: []Node{
+				{ID: "A", Status: StatusSucceeded},
+				{ID: "B", Status: StatusSucceeded},
+				{ID: "C", Status: StatusRunning}, // C is not done yet
+				{ID: "D", Status: StatusCreated},
+			},
+			Edges: []Edge{
+				{From: "A", To: "B"}, {From: "A", To: "C"},
+				{From: "B", To: "D"}, {From: "C", To: "D"},
+			},
+		}
+
+		// Check D blocked by C
+		if err := g.EvaluateReadiness(); err != nil {
+			t.Fatalf("EvaluateReadiness failed: %v", err)
+		}
+		if g.Nodes[3].ID != "D" {
+			t.Fatal("Node D index mismatch")
+		}
+		if g.Nodes[3].Status != StatusBlocked {
+			t.Errorf("Node D should be Blocked (C running), got %s", g.Nodes[3].Status)
+		}
+
+		// Complete C
+		g.Nodes[2].Status = StatusSucceeded
+		if err := g.EvaluateReadiness(); err != nil {
+			t.Fatalf("EvaluateReadiness failed: %v", err)
+		}
+		if g.Nodes[3].Status != StatusPending {
+			t.Errorf("Node D should be Pending (all parents succeeded), got %s", g.Nodes[3].Status)
+		}
+	})
 }
 
 func TestGraphStatusTransitions(t *testing.T) {
