@@ -38,6 +38,7 @@ message Node {
   string id = 1;
   string type = 2; // e.g., "researcher", "synthesizer", "critic"
   map<string, string> config = 3;
+  double relevance_score = 4; // 0.0 to 1.0 indicating importance or confidence
 }
 
 message Edge {
