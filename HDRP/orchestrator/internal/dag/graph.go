@@ -5,11 +5,24 @@ import (
 	"fmt"
 )
 
+// Status represents the current execution state of a graph or node.
+type Status string
+
+const (
+	StatusCreated   Status = "CREATED"
+	StatusPending   Status = "PENDING"
+	StatusRunning   Status = "RUNNING"
+	StatusSucceeded Status = "SUCCEEDED"
+	StatusFailed    Status = "FAILED"
+	StatusCancelled Status = "CANCELLED"
+)
+
 // Node represents a step in the processing pipeline.
 type Node struct {
 	ID     string            `json:"id"`
 	Type   string            `json:"type"`
 	Config map[string]string `json:"config"`
+	Status Status            `json:"status"`
 }
 
 // Edge represents a directed connection between two nodes.
@@ -20,9 +33,10 @@ type Edge struct {
 
 // Graph represents the DAG structure.
 type Graph struct {
-	ID    string `json:"id"`
-	Nodes []Node `json:"nodes"`
-	Edges []Edge `json:"edges"`
+	ID     string `json:"id"`
+	Nodes  []Node `json:"nodes"`
+	Edges  []Edge `json:"edges"`
+	Status Status `json:"status"`
 }
 
 // ValidationError represents an aggregation of validation issues.
