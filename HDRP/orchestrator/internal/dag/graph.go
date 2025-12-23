@@ -20,10 +20,11 @@ const (
 
 // Node represents a step in the processing pipeline.
 type Node struct {
-	ID     string            `json:"id"`
-	Type   string            `json:"type"`
-	Config map[string]string `json:"config"`
-	Status Status            `json:"status"`
+	ID             string            `json:"id"`
+	Type           string            `json:"type"`
+	Config         map[string]string `json:"config"`
+	Status         Status            `json:"status"`
+	RelevanceScore float64           `json:"relevance_score"`
 }
 
 // Validate ensures the node represents a single, atomic unit of work.
