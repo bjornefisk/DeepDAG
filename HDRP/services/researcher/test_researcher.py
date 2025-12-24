@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import Mock
 from HDRP.services.researcher.service import ResearcherService
 from HDRP.tools.search.simulated import SimulatedSearchProvider
 
@@ -19,10 +20,15 @@ class TestResearcherService(unittest.TestCase):
             self.assertTrue(claim.source_url.startswith("http"))
             # In our MVP ClaimExtractor, support_text is the statement itself
             self.assertEqual(claim.statement, claim.support_text)
-            print(f"Claim: {claim.statement}")
-            print(f"Source: {claim.source_url}")
-            print(f"Support: {claim.support_text}")
-            print("-" * 20)
+            # print(f"Claim: {claim.statement}")
+
+    def test_research_failure_logging(self):
+        # Mock the search provider to raise an exception
+        self.search_provider.search = Mock(side_effect=Exception("Simulated API Error"))
+        
+        # Ensure exception is re-raised
+        with self.assertRaisesRegex(Exception, "Simulated API Error"):
+            self.researcher.research("fail query")
 
 if __name__ == "__main__":
     unittest.main()

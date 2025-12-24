@@ -1,6 +1,7 @@
-from typing import List
-from HDRP.tools.search.base import SearchProvider
+from typing import List, Optional
+from HDRP.tools.search.base import SearchProvider, SearchError
 from HDRP.services.shared.claims import ClaimExtractor, AtomicClaim
+from HDRP.services.shared.logger import ResearchLogger
 
 class ResearcherService:
     """Service responsible for executing research tasks.
@@ -9,16 +10,34 @@ class ResearcherService:
     turn unstructured search results into verified atomic claims with 
     explicit source attribution.
     """
-    def __init__(self, search_provider: SearchProvider):
+    def __init__(self, search_provider: SearchProvider, run_id: Optional[str] = None):
         self.search_provider = search_provider
         self.extractor = ClaimExtractor()
+        self.logger = ResearchLogger("researcher", run_id=run_id)
 
     def research(self, query: str) -> List[AtomicClaim]:
         """Performs research on a given query and returns a list of atomic claims.
         
         Each claim will include the source URL and the support text where it was found.
         """
-        search_response = self.search_provider.search(query)
+        try:
+            search_response = self.search_provider.search(query)
+        except Exception as e:
+            self.logger.log("research_failed", {
+                "query": query,
+                "error": str(e),
+                "type": type(e).__name__
+            })
+            raise e
+
+        if not search_response.results:
+            self.logger.log("research_failed", {
+                "query": query,
+                "error": "No results found",
+                "type": "EmptyResults"
+            })
+            return []
+
         all_claims = []
         
         for result in search_response.results:
