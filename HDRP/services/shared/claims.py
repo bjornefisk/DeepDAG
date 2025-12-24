@@ -9,6 +9,7 @@ class AtomicClaim(BaseModel):
     support_text: Optional[str] = Field(None, description="The specific snippet from the source that supports the claim")
     source_url: Optional[str] = Field(None, description="The URL of the source where the claim was found")
     confidence: float = Field(0.0, ge=0.0, le=1.0)
+    discovered_entities: List[str] = Field(default_factory=list, description="Entities identified in the claim that may be new topics")
 
 class ExtractionResponse(BaseModel):
     """Container for claims extracted from a specific source text."""
@@ -46,7 +47,8 @@ class ClaimExtractor:
                     statement=sentence,
                     support_text=sentence, 
                     source_url=source_url,
-                    confidence=0.7 # Base confidence for heuristic extraction
+                    confidence=0.7, # Base confidence for heuristic extraction
+                    discovered_entities=self._extract_entities(sentence)
                 )
                 extracted_claims.append(claim)
 
@@ -76,3 +78,20 @@ class ClaimExtractor:
             return False
 
         return True
+
+    def _extract_entities(self, sentence: str) -> List[str]:
+        """Heuristic: Extract capitalized words (potential named entities) not at start."""
+        import re
+        words = sentence.split()
+        entities = []
+        if not words:
+            return []
+        
+        # Skip the first word to avoid sentence-start capitalization false positives
+        for word in words[1:]:
+            # Clean punctuation
+            clean = re.sub(r'[^\w]', '', word)
+            if clean and clean[0].isupper():
+                entities.append(clean)
+        
+        return list(set(entities))

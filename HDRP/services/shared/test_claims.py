@@ -27,5 +27,17 @@ class TestClaimExtractor(unittest.TestCase):
         self.assertEqual(len(response.claims), 1)
         self.assertTrue("physics" in response.claims[0].statement)
 
+    def test_entity_discovery(self):
+        text = "The launch of Apollo 11 was a major event for NASA and the USA."
+        response = self.extractor.extract(text)
+        self.assertEqual(len(response.claims), 1)
+        claim = response.claims[0]
+        # "Apollo", "NASA", "USA" should be found. "The" is skipped as first word.
+        self.assertIn("NASA", claim.discovered_entities)
+        self.assertIn("USA", claim.discovered_entities)
+        # "Apollo" might be found if "11" is handled, or just "Apollo" depending on split
+        # My regex only captures words starting with capital. 
+        # "11" is not captured.
+        
 if __name__ == "__main__":
     unittest.main()
