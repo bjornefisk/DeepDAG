@@ -7,13 +7,14 @@ class TestClaimExtractor(unittest.TestCase):
 
     def test_basic_extraction(self):
         text = "Quantum computing uses qubits to perform calculations. RSA encryption is vulnerable to Shor's algorithm. I think it is very cool."
-        response = self.extractor.extract(text, source_uri="https://example.com")
+        response = self.extractor.extract(text, source_url="https://example.com")
         
         # Should extract the first two but ignore the opinion
         self.assertEqual(len(response.claims), 2)
         self.assertEqual(response.claims[0].statement, "Quantum computing uses qubits to perform calculations.")
         self.assertEqual(response.claims[1].statement, "RSA encryption is vulnerable to Shor's algorithm.")
-        self.assertEqual(response.claims[0].source_uri, "https://example.com")
+        self.assertEqual(response.claims[0].source_url, "https://example.com")
+        self.assertEqual(response.claims[0].support_text, "Quantum computing uses qubits to perform calculations.")
 
     def test_empty_input(self):
         response = self.extractor.extract("")

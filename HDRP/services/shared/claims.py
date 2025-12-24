@@ -6,8 +6,8 @@ class AtomicClaim(BaseModel):
     """Represents a single, non-decomposable factual statement."""
     claim_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     statement: str = Field(..., description="The factual claim in plain text")
-    context: Optional[str] = Field(None, description="Original context or surrounding text")
-    source_uri: Optional[str] = Field(None, description="URL or document reference")
+    support_text: Optional[str] = Field(None, description="The specific snippet from the source that supports the claim")
+    source_url: Optional[str] = Field(None, description="The URL of the source where the claim was found")
     confidence: float = Field(0.0, ge=0.0, le=1.0)
 
 class ExtractionResponse(BaseModel):
@@ -23,7 +23,7 @@ class ClaimExtractor:
     into individual units of verification.
     """
 
-    def extract(self, text: str, source_uri: Optional[str] = None) -> ExtractionResponse:
+    def extract(self, text: str, source_url: Optional[str] = None) -> ExtractionResponse:
         """Parses text and extracts a list of atomic claims.
         
         For the MVP, this uses a combination of sentence splitting and 
@@ -34,17 +34,18 @@ class ClaimExtractor:
             return ExtractionResponse(source_text=text, claims=[])
 
         # MVP Heuristic: Split by sentences and filter for 'fact-like' statements.
-        # We look for indicative verbs and avoid purely subjective/opinionated starts.
         sentences = self._split_sentences(text)
         extracted_claims = []
 
         for sentence in sentences:
             sentence = sentence.strip()
             if self._is_likely_factual(sentence):
+                # For the MVP, the support text is the sentence itself found in the source.
+                # In more advanced versions, this might include surrounding sentences for context.
                 claim = AtomicClaim(
                     statement=sentence,
-                    context=text[:200] + "..." if len(text) > 200 else text,
-                    source_uri=source_uri,
+                    support_text=sentence, 
+                    source_url=source_url,
                     confidence=0.7 # Base confidence for heuristic extraction
                 )
                 extracted_claims.append(claim)
