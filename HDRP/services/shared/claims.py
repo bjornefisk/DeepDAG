@@ -1,0 +1,77 @@
+from typing import List, Optional
+from pydantic import BaseModel, Field
+import uuid
+
+class AtomicClaim(BaseModel):
+    """Represents a single, non-decomposable factual statement."""
+    claim_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    statement: str = Field(..., description="The factual claim in plain text")
+    context: Optional[str] = Field(None, description="Original context or surrounding text")
+    source_uri: Optional[str] = Field(None, description="URL or document reference")
+    confidence: float = Field(0.0, ge=0.0, le=1.0)
+
+class ExtractionResponse(BaseModel):
+    """Container for claims extracted from a specific source text."""
+    source_text: str
+    claims: List[AtomicClaim]
+    metadata: dict = Field(default_factory=dict)
+
+class ClaimExtractor:
+    """Service to decompose complex text into atomic factual statements.
+    
+    This follows the 'Atomic Research' pattern where large documents are broken 
+    into individual units of verification.
+    """
+
+    def extract(self, text: str, source_uri: Optional[str] = None) -> ExtractionResponse:
+        """Parses text and extracts a list of atomic claims.
+        
+        For the MVP, this uses a combination of sentence splitting and 
+        heuristic filtering. In production, this would be backed by a 
+        specialized LLM prompt.
+        """
+        if not text or len(text.strip()) == 0:
+            return ExtractionResponse(source_text=text, claims=[])
+
+        # MVP Heuristic: Split by sentences and filter for 'fact-like' statements.
+        # We look for indicative verbs and avoid purely subjective/opinionated starts.
+        sentences = self._split_sentences(text)
+        extracted_claims = []
+
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if self._is_likely_factual(sentence):
+                claim = AtomicClaim(
+                    statement=sentence,
+                    context=text[:200] + "..." if len(text) > 200 else text,
+                    source_uri=source_uri,
+                    confidence=0.7 # Base confidence for heuristic extraction
+                )
+                extracted_claims.append(claim)
+
+        return ExtractionResponse(
+            source_text=text,
+            claims=extracted_claims,
+            metadata={"strategy": "heuristic_sentence_split", "input_len": len(text)}
+        )
+
+    def _split_sentences(self, text: str) -> List[str]:
+        """Simple sentence splitter using punctuation boundaries."""
+        import re
+        # Split on . ! ? followed by space or newline
+        return re.split(r'(?<=[.!?])\s+', text)
+
+    def _is_likely_factual(self, sentence: str) -> bool:
+        """Heuristic check to filter out non-factual content (queries, greetings, very short text)."""
+        if len(sentence) < 20: # Too short to be a meaningful claim
+            return False
+        
+        if sentence.endswith('?'): # It's a question
+            return False
+
+        subjective_indicators = ["i think", "i believe", "in my opinion", "hello", "hi there"]
+        lower_s = sentence.lower()
+        if any(indicator in lower_s for indicator in subjective_indicators):
+            return False
+
+        return True
