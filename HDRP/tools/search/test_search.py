@@ -1,5 +1,5 @@
 import unittest
-from HDRP.tools.search import SearchFactory, SearchResult
+from HDRP.tools.search import SearchFactory, SearchResult, SearchError
 
 class TestSearchTool(unittest.TestCase):
     
@@ -52,6 +52,14 @@ class TestSearchTool(unittest.TestCase):
             
         for domain, count in domain_counts.items():
             self.assertLessEqual(count, 2, f"Domain {domain} exceeded max diversity limit")
+
+    def test_factory_invalid_provider(self):
+        with self.assertRaises(ValueError):
+            SearchFactory.get_provider("invalid_provider_name")
+            
+    def test_factory_unimplemented_provider(self):
+        with self.assertRaises(NotImplementedError):
+            SearchFactory.get_provider("google")
 
 if __name__ == '__main__':
     unittest.main()

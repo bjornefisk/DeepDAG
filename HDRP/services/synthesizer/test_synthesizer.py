@@ -6,7 +6,7 @@ class TestSynthesizerService(unittest.TestCase):
     def setUp(self):
         self.synthesizer = SynthesizerService()
 
-    def test_synthesize_report(self):
+    def test_synthesize_report_basic(self):
         claims = [
             AtomicClaim(
                 statement="Quantum computing uses qubits.",
@@ -27,7 +27,37 @@ class TestSynthesizerService(unittest.TestCase):
         self.assertIn("## Bibliography", report)
         self.assertIn("- https://example.com/q1", report)
         self.assertIn("- https://example.com/q2", report)
-        print(report)
+
+    def test_synthesize_empty_claims(self):
+        report = self.synthesizer.synthesize([])
+        self.assertEqual(report, "No verified information found.")
+
+    def test_synthesize_duplicate_sources(self):
+        claims = [
+            AtomicClaim(statement="A", source_url="http://site.com/1"),
+            AtomicClaim(statement="B", source_url="http://site.com/1"), # Duplicate source
+            AtomicClaim(statement="C", source_url="http://site.com/2"),
+        ]
+        report = self.synthesizer.synthesize(claims)
+        
+        # Bibliography should list http://site.com/1 only once
+        self.assertEqual(report.count("http://site.com/1"), 3) # 2 in text + 1 in bib
+        # Actually: 
+        # Text: [Source](http://site.com/1) x2
+        # Bib: - http://site.com/1 x1
+        # Total 3.
+        
+        # Let's check the Bibliography section specifically
+        bib_section = report.split("## Bibliography")[1]
+        self.assertEqual(bib_section.count("http://site.com/1"), 1)
+
+    def test_synthesize_missing_support_text(self):
+        claims = [
+            AtomicClaim(statement="Fact without support snippet.", source_url="http://site.com/3")
+        ]
+        report = self.synthesizer.synthesize(claims)
+        self.assertIn("Fact without support snippet.", report)
+        self.assertNotIn("> *Support:", report) # Should not generate support block
 
 if __name__ == "__main__":
     unittest.main()
