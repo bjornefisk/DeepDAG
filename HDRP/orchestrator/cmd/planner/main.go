@@ -15,10 +15,11 @@ import (
 
 func main() {
 	queryPtr := flag.String("query", "", "The research query or objective")
+	jsonPtr := flag.Bool("json", false, "Output only the final structured JSON")
 	flag.Parse()
 
 	if *queryPtr == "" {
-		fmt.Println("Please provide a query using -query=\"...\"")
+		fmt.Fprintln(os.Stderr, "Please provide a query using -query=\"...\"")
 		os.Exit(1)
 	}
 
@@ -34,43 +35,57 @@ func main() {
 	logger.LogEvent(ctx, runID, "cli", "startup", map[string]string{"query": *queryPtr})
 
 	// 1. Parse Intent
-	fmt.Println("--> Parsing Intent...")
+	if !*jsonPtr {
+		fmt.Println("--> Parsing Intent...")
+	}
 	parser := intent.NewBasicParser()
 	objective, err := parser.Parse(*queryPtr)
 	if err != nil {
 		logger.LogEvent(ctx, runID, "cli", "error", map[string]string{"phase": "intent", "error": err.Error()})
-		fmt.Printf("Error parsing intent: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error parsing intent: %v\n", err)
 		os.Exit(1)
 	}
 	
-	fmt.Printf("    Identified Intent: %s\n", objective.Type)
-	fmt.Printf("    Constraints: %v\n", objective.Constraints)
+	if !*jsonPtr {
+		fmt.Printf("    Identified Intent: %s\n", objective.Type)
+		fmt.Printf("    Constraints: %v\n", objective.Constraints)
+	}
 
 	// 2. Generate Plan (DAG)
-	fmt.Println("--> Generating Execution Graph...")
+	if !*jsonPtr {
+		fmt.Println("--> Generating Execution Graph...")
+	}
 	gen := generator.NewTemplateGenerator()
 	graph, err := gen.Generate(objective)
 	if err != nil {
 		logger.LogEvent(ctx, runID, "cli", "error", map[string]string{"phase": "generation", "error": err.Error()})
-		fmt.Printf("Error generating graph: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error generating graph: %v\n", err)
 		os.Exit(1)
 	}
 
 	// 3. Validate
 	if err := graph.Validate(); err != nil {
-		fmt.Printf("Generated graph is invalid: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Generated graph is invalid: %v\n", err)
 		os.Exit(1)
 	}
 
 	// 4. Log Plan
 	dag.LogGraphPlan(ctx, runID, graph)
-	fmt.Println("--> Plan Logged.")
+	if !*jsonPtr {
+		fmt.Println("--> Plan Logged.")
+	}
 
 	// 5. Output JSON to Stdout for user inspection
-	fmt.Println("\n=== FINAL PLAN (JSON) ===")
+	if !*jsonPtr {
+		fmt.Println("\n=== FINAL PLAN (JSON) ===")
+	}
 	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
+	if !*jsonPtr {
+		enc.SetIndent("", "  ")
+	}
 	enc.Encode(graph)
 	
-	fmt.Printf("\nCheck logs at HDRP/logs/%s.jsonl\n", runID)
+	if !*jsonPtr {
+		fmt.Printf("\nCheck logs at HDRP/logs/%s.jsonl\n", runID)
+	}
 }
