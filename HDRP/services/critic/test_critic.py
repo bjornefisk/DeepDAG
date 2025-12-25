@@ -50,6 +50,17 @@ class TestCriticService(unittest.TestCase):
         self.assertFalse(results[0][1])
         self.assertEqual(results[0][2], "REJECTED: Low grounding - statement deviates significantly from support text")
 
+    def test_verify_invalid_claim_not_verbatim(self):
+        claim = AtomicClaim(
+            statement="Quantum computing uses qubits for all its calculations.",
+            support_text="Quantum computing uses qubits for calculations, which are fundamental units.",
+            source_url="https://example.com/fast",
+            confidence=1.0
+        )
+        results = self.critic.verify([claim])
+        self.assertFalse(results[0][1])
+        self.assertEqual(results[0][2], "REJECTED: Claim statement not found verbatim in source text")
+
     def test_verify_invalid_claim_missing_url(self):
         claim = AtomicClaim(
             statement="The sky is blue.",

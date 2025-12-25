@@ -58,6 +58,12 @@ class CriticService:
                 results.append((claim, False, "REJECTED: Low grounding - statement deviates significantly from support text"))
                 continue
 
+            # 5. Verbatim Check
+            # Final strict check: the statement MUST exist verbatim in the support text.
+            if claim.statement not in claim.support_text:
+                results.append((claim, False, "REJECTED: Claim statement not found verbatim in source text"))
+                continue
+
             results.append((claim, True, "Verified: Grounded and concrete"))
             
         return results
