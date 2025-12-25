@@ -112,5 +112,21 @@ class TestCriticService(unittest.TestCase):
         self.assertFalse(results[0][1])
         self.assertEqual(results[0][2], "REJECTED: Detected inferred logical leap not present in source")
 
+    def test_verify_invalid_claim_weak_grounding_strict(self):
+        # This claim has some overlap ("The", "sky", "is") but the meaning is different.
+        # Current threshold is 0.4.
+        # Statement words: 6. Overlap: "The", "sky", "is" -> 3/6 = 0.5. Passes current check.
+        # Desired: should fail with stricter check (e.g. 0.7 or stop word filtering).
+        claim = AtomicClaim(
+            statement="The sky is green and red.",
+            support_text="The sky is blue today.",
+            source_url="https://example.com/sky",
+            confidence=1.0
+        )
+        # We expect this to fail with the improved logic
+        results = self.critic.verify([claim], task="sky color")
+        self.assertFalse(results[0][1])
+        self.assertEqual(results[0][2], "REJECTED: Low grounding - statement deviates significantly from support text")
+
 if __name__ == "__main__":
     unittest.main()

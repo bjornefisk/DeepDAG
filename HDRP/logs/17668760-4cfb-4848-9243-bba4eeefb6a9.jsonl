@@ -1,0 +1,1 @@
+{"timestamp": "2025-12-25T16:46:37.564993Z", "level": "INFO", "component": "researcher", "run_id": "1018d275-e06f-4bdd-9655-a9541f756d49", "event": "research_failed", "payload": {"query": "fail query", "error": "Simulated API Error", "type": "Exception"}}

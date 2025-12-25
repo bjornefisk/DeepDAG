@@ -68,11 +68,19 @@ class CriticService:
             # 4. Grounding Check
             # Ensure the core claim isn't a complete hallucination relative to the snippet.
             # In an MVP, we check for high keyword overlap.
-            statement_words = set(lower_statement.split())
-            support_words = set(claim.support_text.lower().split())
-            overlap = statement_words.intersection(support_words)
+            statement_tokens = self._tokenize(lower_statement)
+            support_tokens = set(self._tokenize(claim.support_text.lower()))
             
-            if len(overlap) / len(statement_words) < 0.4:
+            # Filter stop words from statement tokens
+            filtered_statement_tokens = [w for w in statement_tokens if w not in STOP_WORDS]
+            
+            # If statement is only stop words (unlikely due to length check), fall back to raw tokens
+            if not filtered_statement_tokens:
+                 filtered_statement_tokens = statement_tokens
+
+            overlap_count = sum(1 for w in filtered_statement_tokens if w in support_tokens)
+            
+            if len(filtered_statement_tokens) > 0 and (overlap_count / len(filtered_statement_tokens)) < 0.7:
                 results.append((claim, False, "REJECTED: Low grounding - statement deviates significantly from support text"))
                 continue
 
@@ -85,7 +93,7 @@ class CriticService:
             # 6. Relevance Check
             # Ensure the claim is actually relevant to the requested task.
             # We require at least one significant token overlap between task and claim.
-            claim_tokens = set(word for word in statement_words if word not in STOP_WORDS)
+            claim_tokens = set(word for word in filtered_statement_tokens if word not in STOP_WORDS)
             relevance_overlap = task_tokens.intersection(claim_tokens)
             
             if not relevance_overlap:
@@ -95,3 +103,10 @@ class CriticService:
             results.append((claim, True, "Verified: Grounded and concrete"))
             
         return results
+
+    def _tokenize(self, text: str) -> List[str]:
+        """Simple tokenizer that strips punctuation."""
+        import re
+        # Replace non-alphanumeric characters with space and split
+        clean_text = re.sub(r'[^\w\s]', ' ', text)
+        return clean_text.split()
