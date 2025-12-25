@@ -100,5 +100,17 @@ class TestCriticService(unittest.TestCase):
         # Intersection: empty.
         self.assertIn("REJECTED: Claim not relevant to task", results[0][2])
 
+    def test_verify_invalid_claim_new_inference_indicator(self):
+        claim = AtomicClaim(
+            statement="The test failed because of a bug.",
+            support_text="The test failed. A bug was found later.",
+            source_url="https://example.com/test",
+            confidence=1.0
+        )
+        # "because" is now an indicator. It is in statement but not in support text.
+        results = self.critic.verify([claim], task="test failure")
+        self.assertFalse(results[0][1])
+        self.assertEqual(results[0][2], "REJECTED: Detected inferred logical leap not present in source")
+
 if __name__ == "__main__":
     unittest.main()

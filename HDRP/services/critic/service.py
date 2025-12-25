@@ -54,7 +54,10 @@ class CriticService:
 
             # 3. Inferred/Logical Leap Detection
             # Detects if the agent is trying to 'reason' instead of 'extracting'.
-            inference_indicators = ["therefore", "thus", "consequently", "as a result", "which means", "implying"]
+            inference_indicators = [
+                "therefore", "thus", "consequently", "as a result", "which means", "implying", 
+                "implies", "suggests", "indicates", "because", "due to", "hence", "leads to"
+            ]
             if any(word in lower_statement for word in inference_indicators):
                 # If these words are in the statement but NOT in the support text, it's a hallucinated inference.
                 lower_support = claim.support_text.lower()
