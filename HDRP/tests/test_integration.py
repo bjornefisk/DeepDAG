@@ -28,7 +28,7 @@ class TestHDRPIntegration(unittest.TestCase):
         verified_claims = []
         for claim in claims:
             # Check verification logic
-            results = self.critic.verify([claim])
+            results = self.critic.verify([claim], task=query)
             # unpack list of tuples
             for res in results:
                 claim_obj, is_valid, reason = res

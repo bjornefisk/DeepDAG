@@ -9,12 +9,27 @@ class CriticService:
     between the statement and the support text.
     """
     
-    def verify(self, claims: List[AtomicClaim]) -> List[Tuple[AtomicClaim, bool, str]]:
+    def verify(self, claims: List[AtomicClaim], task: str) -> List[Tuple[AtomicClaim, bool, str]]:
         """Verifies a list of claims.
         
-        Returns a list of tuples: (claim, is_valid, reason)
+        Args:
+            claims: List of claims to verify.
+            task: The original task/query that generated these claims.
+
+        Returns:
+            list of tuples: (claim, is_valid, reason)
         """
         results = []
+        
+        # Simple stop words list for MVP relevance checking
+        STOP_WORDS = {
+            "the", "is", "at", "of", "on", "and", "a", "to", "in", "for", 
+            "with", "by", "from", "up", "about", "into", "over", "after",
+            "research", "find", "identify", "list", "describe", "explain" # task-specific stops
+        }
+
+        task_tokens = set(word.lower() for word in task.split() if word.lower() not in STOP_WORDS)
+
         for claim in claims:
             # 1. Basic Presence Checks
             if not claim.source_url:
@@ -62,6 +77,16 @@ class CriticService:
             # Final strict check: the statement MUST exist verbatim in the support text.
             if claim.statement not in claim.support_text:
                 results.append((claim, False, "REJECTED: Claim statement not found verbatim in source text"))
+                continue
+
+            # 6. Relevance Check
+            # Ensure the claim is actually relevant to the requested task.
+            # We require at least one significant token overlap between task and claim.
+            claim_tokens = set(word for word in statement_words if word not in STOP_WORDS)
+            relevance_overlap = task_tokens.intersection(claim_tokens)
+            
+            if not relevance_overlap:
+                results.append((claim, False, f"REJECTED: Claim not relevant to task '{task}' (no keyword overlap)"))
                 continue
 
             results.append((claim, True, "Verified: Grounded and concrete"))
