@@ -31,12 +31,11 @@ class TestHDRPIntegration(unittest.TestCase):
             results = self.critic.verify([claim], task=query)
             # unpack list of tuples
             for res in results:
-                claim_obj, is_valid, reason = res
-                if is_valid:
-                    verified_claims.append(claim_obj)
+                if res.is_valid:
+                    verified_claims.append(res.claim)
                 else:
                     # Optional: assert that rejection reasons are valid strings
-                    self.assertTrue(len(reason) > 0)
+                    self.assertTrue(len(res.reason) > 0)
         
         print(f" -> Verified {len(verified_claims)} claims.")
         self.assertGreater(len(verified_claims), 0, "Critic should verify at least some claims")

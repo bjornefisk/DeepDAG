@@ -11,6 +11,12 @@ class AtomicClaim(BaseModel):
     confidence: float = Field(0.0, ge=0.0, le=1.0)
     discovered_entities: List[str] = Field(default_factory=list, description="Entities identified in the claim that may be new topics")
 
+class CritiqueResult(BaseModel):
+    """Result of verifying a single atomic claim."""
+    claim: AtomicClaim
+    is_valid: bool
+    reason: str
+
 class ExtractionResponse(BaseModel):
     """Container for claims extracted from a specific source text."""
     source_text: str

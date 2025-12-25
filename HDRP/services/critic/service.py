@@ -1,5 +1,5 @@
-from typing import List, Tuple
-from HDRP.services.shared.claims import AtomicClaim
+from typing import List
+from HDRP.services.shared.claims import AtomicClaim, CritiqueResult
 
 class CriticService:
     """Service responsible for verifying claims found by the Researcher.
@@ -9,7 +9,7 @@ class CriticService:
     between the statement and the support text.
     """
     
-    def verify(self, claims: List[AtomicClaim], task: str) -> List[Tuple[AtomicClaim, bool, str]]:
+    def verify(self, claims: List[AtomicClaim], task: str) -> List[CritiqueResult]:
         """Verifies a list of claims.
         
         Args:
@@ -17,7 +17,7 @@ class CriticService:
             task: The original task/query that generated these claims.
 
         Returns:
-            list of tuples: (claim, is_valid, reason)
+            list of CritiqueResult objects.
         """
         results = []
         
@@ -33,10 +33,10 @@ class CriticService:
         for claim in claims:
             # 1. Basic Presence Checks
             if not claim.source_url:
-                results.append((claim, False, "REJECTED: Missing source URL"))
+                results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Missing source URL"))
                 continue
             if not claim.support_text:
-                results.append((claim, False, "REJECTED: Missing support text"))
+                results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Missing support text"))
                 continue
 
             # 2. Vague Statement Detection
@@ -45,11 +45,11 @@ class CriticService:
             lower_statement = claim.statement.lower()
             
             if any(word in lower_statement for word in vague_indicators):
-                results.append((claim, False, "REJECTED: Statement is too vague/speculative"))
+                results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Statement is too vague/speculative"))
                 continue
 
             if len(claim.statement.split()) < 5:
-                results.append((claim, False, "REJECTED: Statement too short to be substantive"))
+                results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Statement too short to be substantive"))
                 continue
 
             # 3. Inferred/Logical Leap Detection
@@ -62,7 +62,7 @@ class CriticService:
                 # If these words are in the statement but NOT in the support text, it's a hallucinated inference.
                 lower_support = claim.support_text.lower()
                 if not any(word in lower_support for word in inference_indicators):
-                    results.append((claim, False, "REJECTED: Detected inferred logical leap not present in source"))
+                    results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Detected inferred logical leap not present in source"))
                     continue
 
             # 4. Grounding Check
@@ -81,13 +81,13 @@ class CriticService:
             overlap_count = sum(1 for w in filtered_statement_tokens if w in support_tokens)
             
             if len(filtered_statement_tokens) > 0 and (overlap_count / len(filtered_statement_tokens)) < 0.7:
-                results.append((claim, False, "REJECTED: Low grounding - statement deviates significantly from support text"))
+                results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Low grounding - statement deviates significantly from support text"))
                 continue
 
             # 5. Verbatim Check
             # Final strict check: the statement MUST exist verbatim in the support text.
             if claim.statement not in claim.support_text:
-                results.append((claim, False, "REJECTED: Claim statement not found verbatim in source text"))
+                results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Claim statement not found verbatim in source text"))
                 continue
 
             # 6. Relevance Check
@@ -97,10 +97,10 @@ class CriticService:
             relevance_overlap = task_tokens.intersection(claim_tokens)
             
             if not relevance_overlap:
-                results.append((claim, False, f"REJECTED: Claim not relevant to task '{task}' (no keyword overlap)"))
+                results.append(CritiqueResult(claim=claim, is_valid=False, reason=f"REJECTED: Claim not relevant to task '{task}' (no keyword overlap)"))
                 continue
 
-            results.append((claim, True, "Verified: Grounded and concrete"))
+            results.append(CritiqueResult(claim=claim, is_valid=True, reason="Verified: Grounded and concrete"))
             
         return results
 

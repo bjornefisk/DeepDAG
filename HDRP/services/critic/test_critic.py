@@ -15,8 +15,8 @@ class TestCriticService(unittest.TestCase):
         )
         # Task should be relevant
         results = self.critic.verify([claim], task="explain quantum computing")
-        self.assertTrue(results[0][1])
-        self.assertEqual(results[0][2], "Verified: Grounded and concrete")
+        self.assertTrue(results[0].is_valid)
+        self.assertEqual(results[0].reason, "Verified: Grounded and concrete")
 
     def test_verify_invalid_claim_vague(self):
         claim = AtomicClaim(
@@ -26,8 +26,8 @@ class TestCriticService(unittest.TestCase):
             confidence=1.0
         )
         results = self.critic.verify([claim], task="quantum stuff")
-        self.assertFalse(results[0][1])
-        self.assertEqual(results[0][2], "REJECTED: Statement is too vague/speculative")
+        self.assertFalse(results[0].is_valid)
+        self.assertEqual(results[0].reason, "REJECTED: Statement is too vague/speculative")
 
     def test_verify_invalid_claim_inferred(self):
         claim = AtomicClaim(
@@ -37,8 +37,8 @@ class TestCriticService(unittest.TestCase):
             confidence=1.0
         )
         results = self.critic.verify([claim], task="nvidia market")
-        self.assertFalse(results[0][1])
-        self.assertEqual(results[0][2], "REJECTED: Detected inferred logical leap not present in source")
+        self.assertFalse(results[0].is_valid)
+        self.assertEqual(results[0].reason, "REJECTED: Detected inferred logical leap not present in source")
 
     def test_verify_invalid_claim_hallucinated(self):
         claim = AtomicClaim(
@@ -48,8 +48,8 @@ class TestCriticService(unittest.TestCase):
             confidence=1.0
         )
         results = self.critic.verify([claim], task="apple ceo")
-        self.assertFalse(results[0][1])
-        self.assertEqual(results[0][2], "REJECTED: Low grounding - statement deviates significantly from support text")
+        self.assertFalse(results[0].is_valid)
+        self.assertEqual(results[0].reason, "REJECTED: Low grounding - statement deviates significantly from support text")
 
     def test_verify_invalid_claim_missing_url(self):
         claim = AtomicClaim(
@@ -59,8 +59,8 @@ class TestCriticService(unittest.TestCase):
             confidence=1.0
         )
         results = self.critic.verify([claim], task="sky color")
-        self.assertFalse(results[0][1])
-        self.assertEqual(results[0][2], "REJECTED: Missing source URL")
+        self.assertFalse(results[0].is_valid)
+        self.assertEqual(results[0].reason, "REJECTED: Missing source URL")
 
     def test_verify_invalid_claim_short_support(self):
         claim = AtomicClaim(
@@ -70,8 +70,8 @@ class TestCriticService(unittest.TestCase):
             confidence=1.0
         )
         results = self.critic.verify([claim], task="sky color")
-        self.assertFalse(results[0][1])
-        self.assertEqual(results[0][2], "REJECTED: Low grounding - statement deviates significantly from support text")
+        self.assertFalse(results[0].is_valid)
+        self.assertEqual(results[0].reason, "REJECTED: Low grounding - statement deviates significantly from support text")
 
     def test_verify_invalid_claim_not_verbatim(self):
         claim = AtomicClaim(
@@ -81,8 +81,8 @@ class TestCriticService(unittest.TestCase):
             confidence=1.0
         )
         results = self.critic.verify([claim], task="quantum computing")
-        self.assertFalse(results[0][1])
-        self.assertEqual(results[0][2], "REJECTED: Claim statement not found verbatim in source text")
+        self.assertFalse(results[0].is_valid)
+        self.assertEqual(results[0].reason, "REJECTED: Claim statement not found verbatim in source text")
 
     def test_verify_invalid_claim_irrelevant(self):
         claim = AtomicClaim(
@@ -93,12 +93,12 @@ class TestCriticService(unittest.TestCase):
         )
         # Task is about quantum computing, claim is about bananas
         results = self.critic.verify([claim], task="research quantum computing")
-        self.assertFalse(results[0][1])
+        self.assertFalse(results[0].is_valid)
         # We expect a rejection message about relevance.
         # Note: 'research' is a stop word, so task tokens: 'quantum', 'computing'
         # Claim tokens: 'bananas', 'rich', 'potassium', 'vitamins'
         # Intersection: empty.
-        self.assertIn("REJECTED: Claim not relevant to task", results[0][2])
+        self.assertIn("REJECTED: Claim not relevant to task", results[0].reason)
 
     def test_verify_invalid_claim_new_inference_indicator(self):
         claim = AtomicClaim(
@@ -109,8 +109,8 @@ class TestCriticService(unittest.TestCase):
         )
         # "because" is now an indicator. It is in statement but not in support text.
         results = self.critic.verify([claim], task="test failure")
-        self.assertFalse(results[0][1])
-        self.assertEqual(results[0][2], "REJECTED: Detected inferred logical leap not present in source")
+        self.assertFalse(results[0].is_valid)
+        self.assertEqual(results[0].reason, "REJECTED: Detected inferred logical leap not present in source")
 
     def test_verify_invalid_claim_weak_grounding_strict(self):
         # This claim has some overlap ("The", "sky", "is") but the meaning is different.
@@ -125,8 +125,8 @@ class TestCriticService(unittest.TestCase):
         )
         # We expect this to fail with the improved logic
         results = self.critic.verify([claim], task="sky color")
-        self.assertFalse(results[0][1])
-        self.assertEqual(results[0][2], "REJECTED: Low grounding - statement deviates significantly from support text")
+        self.assertFalse(results[0].is_valid)
+        self.assertEqual(results[0].reason, "REJECTED: Low grounding - statement deviates significantly from support text")
 
 if __name__ == "__main__":
     unittest.main()
