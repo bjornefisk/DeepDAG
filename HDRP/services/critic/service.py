@@ -1,5 +1,6 @@
-from typing import List
+from typing import List, Optional
 from HDRP.services.shared.claims import AtomicClaim, CritiqueResult
+from HDRP.services.shared.logger import ResearchLogger
 
 class CriticService:
     """Service responsible for verifying claims found by the Researcher.
@@ -8,6 +9,8 @@ class CriticService:
     and (in production) would use an LLM to verify the semantic alignment 
     between the statement and the support text.
     """
+    def __init__(self, run_id: Optional[str] = None):
+        self.logger = ResearchLogger("critic", run_id=run_id)
     
     def verify(self, claims: List[AtomicClaim], task: str) -> List[CritiqueResult]:
         """Verifies a list of claims.
@@ -31,76 +34,71 @@ class CriticService:
         task_tokens = set(word.lower() for word in task.split() if word.lower() not in STOP_WORDS)
 
         for claim in claims:
+            rejection_reason = None
+            
             # 1. Basic Presence Checks
             if not claim.source_url:
-                results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Missing source URL"))
-                continue
-            if not claim.support_text:
-                results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Missing support text"))
-                continue
+                rejection_reason = "REJECTED: Missing source URL"
+            elif not claim.support_text:
+                rejection_reason = "REJECTED: Missing support text"
 
             # 2. Vague Statement Detection
-            # Checks for weak modal verbs, ambiguous pronouns, or lack of concreteness.
-            vague_indicators = ["maybe", "might", "possibly", "probably", "could be", "seems to", "appears to"]
-            lower_statement = claim.statement.lower()
-            
-            if any(word in lower_statement for word in vague_indicators):
-                results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Statement is too vague/speculative"))
-                continue
-
-            if len(claim.statement.split()) < 5:
-                results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Statement too short to be substantive"))
-                continue
+            if not rejection_reason:
+                vague_indicators = ["maybe", "might", "possibly", "probably", "could be", "seems to", "appears to"]
+                lower_statement = claim.statement.lower()
+                
+                if any(word in lower_statement for word in vague_indicators):
+                    rejection_reason = "REJECTED: Statement is too vague/speculative"
+                elif len(claim.statement.split()) < 5:
+                    rejection_reason = "REJECTED: Statement too short to be substantive"
 
             # 3. Inferred/Logical Leap Detection
-            # Detects if the agent is trying to 'reason' instead of 'extracting'.
-            inference_indicators = [
-                "therefore", "thus", "consequently", "as a result", "which means", "implying", 
-                "implies", "suggests", "indicates", "because", "due to", "hence", "leads to"
-            ]
-            if any(word in lower_statement for word in inference_indicators):
-                # If these words are in the statement but NOT in the support text, it's a hallucinated inference.
-                lower_support = claim.support_text.lower()
-                if not any(word in lower_support for word in inference_indicators):
-                    results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Detected inferred logical leap not present in source"))
-                    continue
+            if not rejection_reason:
+                inference_indicators = [
+                    "therefore", "thus", "consequently", "as a result", "which means", "implying", 
+                    "implies", "suggests", "indicates", "because", "due to", "hence", "leads to"
+                ]
+                if any(word in lower_statement for word in inference_indicators):
+                    lower_support = claim.support_text.lower()
+                    if not any(word in lower_support for word in inference_indicators):
+                        rejection_reason = "REJECTED: Detected inferred logical leap not present in source"
 
             # 4. Grounding Check
-            # Ensure the core claim isn't a complete hallucination relative to the snippet.
-            # In an MVP, we check for high keyword overlap.
-            statement_tokens = self._tokenize(lower_statement)
-            support_tokens = set(self._tokenize(claim.support_text.lower()))
-            
-            # Filter stop words from statement tokens
-            filtered_statement_tokens = [w for w in statement_tokens if w not in STOP_WORDS]
-            
-            # If statement is only stop words (unlikely due to length check), fall back to raw tokens
-            if not filtered_statement_tokens:
-                 filtered_statement_tokens = statement_tokens
+            if not rejection_reason:
+                statement_tokens = self._tokenize(lower_statement)
+                support_tokens = set(self._tokenize(claim.support_text.lower()))
+                
+                filtered_statement_tokens = [w for w in statement_tokens if w not in STOP_WORDS]
+                if not filtered_statement_tokens:
+                     filtered_statement_tokens = statement_tokens
 
-            overlap_count = sum(1 for w in filtered_statement_tokens if w in support_tokens)
-            
-            if len(filtered_statement_tokens) > 0 and (overlap_count / len(filtered_statement_tokens)) < 0.7:
-                results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Low grounding - statement deviates significantly from support text"))
-                continue
+                overlap_count = sum(1 for w in filtered_statement_tokens if w in support_tokens)
+                
+                if len(filtered_statement_tokens) > 0 and (overlap_count / len(filtered_statement_tokens)) < 0.7:
+                    rejection_reason = "REJECTED: Low grounding - statement deviates significantly from support text"
 
             # 5. Verbatim Check
-            # Final strict check: the statement MUST exist verbatim in the support text.
-            if claim.statement not in claim.support_text:
-                results.append(CritiqueResult(claim=claim, is_valid=False, reason="REJECTED: Claim statement not found verbatim in source text"))
-                continue
+            if not rejection_reason:
+                if claim.statement not in claim.support_text:
+                    rejection_reason = "REJECTED: Claim statement not found verbatim in source text"
 
             # 6. Relevance Check
-            # Ensure the claim is actually relevant to the requested task.
-            # We require at least one significant token overlap between task and claim.
-            claim_tokens = set(word for word in filtered_statement_tokens if word not in STOP_WORDS)
-            relevance_overlap = task_tokens.intersection(claim_tokens)
-            
-            if not relevance_overlap:
-                results.append(CritiqueResult(claim=claim, is_valid=False, reason=f"REJECTED: Claim not relevant to task '{task}' (no keyword overlap)"))
-                continue
+            if not rejection_reason:
+                claim_tokens = set(word for word in filtered_statement_tokens if word not in STOP_WORDS)
+                relevance_overlap = task_tokens.intersection(claim_tokens)
+                
+                if not relevance_overlap:
+                    rejection_reason = f"REJECTED: Claim not relevant to task '{task}' (no keyword overlap)"
 
-            results.append(CritiqueResult(claim=claim, is_valid=True, reason="Verified: Grounded and concrete"))
+            if rejection_reason:
+                self.logger.log("claim_rejected", {
+                    "claim_id": claim.claim_id,
+                    "reason": rejection_reason,
+                    "statement": claim.statement[:50] + "..." if len(claim.statement) > 50 else claim.statement
+                })
+                results.append(CritiqueResult(claim=claim, is_valid=False, reason=rejection_reason))
+            else:
+                results.append(CritiqueResult(claim=claim, is_valid=True, reason="Verified: Grounded and concrete"))
             
         return results
 
