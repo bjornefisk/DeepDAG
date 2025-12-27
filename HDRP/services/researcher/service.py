@@ -16,7 +16,7 @@ class ResearcherService:
         self.extractor = ClaimExtractor()
         self.logger = ResearchLogger("researcher", run_id=run_id)
 
-    def research(self, query: str) -> List[AtomicClaim]:
+    def research(self, query: str, source_node_id: Optional[str] = None) -> List[AtomicClaim]:
         """Performs research on a given query and returns a list of atomic claims.
         
         Each claim will include the source URL and the support text where it was found.
@@ -65,7 +65,7 @@ class ResearcherService:
         for result in search_response.results:
             # For the MVP standard, we extract claims directly from the search snippets.
             # This ensures that 'support_text' is always tied to a verified search result.
-            extraction = self.extractor.extract(result.snippet, source_url=result.url)
+            extraction = self.extractor.extract(result.snippet, source_url=result.url, source_node_id=source_node_id)
             all_claims.extend(extraction.claims)
             
         return all_claims

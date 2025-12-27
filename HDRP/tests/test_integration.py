@@ -19,9 +19,14 @@ class TestHDRPIntegration(unittest.TestCase):
         
         # 1. Researcher: Find claims
         print(f"\n[Integration] Step 1: Researching '{query}'...")
-        claims = self.researcher.research(query)
+        # Simulate passing a node ID
+        claims = self.researcher.research(query, source_node_id="node_quantum_1")
         self.assertGreater(len(claims), 0, "Researcher should find claims")
         print(f" -> Found {len(claims)} raw claims.")
+        
+        # Verify source_node_id propagation
+        for c in claims:
+            self.assertEqual(c.source_node_id, "node_quantum_1")
         
         # 2. Critic: Verify claims
         print("[Integration] Step 2: Verifying claims...")

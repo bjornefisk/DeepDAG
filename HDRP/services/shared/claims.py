@@ -8,6 +8,7 @@ class AtomicClaim(BaseModel):
     statement: str = Field(..., description="The factual claim in plain text")
     support_text: Optional[str] = Field(None, description="The specific snippet from the source that supports the claim")
     source_url: Optional[str] = Field(None, description="The URL of the source where the claim was found")
+    source_node_id: Optional[str] = Field(None, description="The ID of the DAG node that generated this claim")
     confidence: float = Field(0.0, ge=0.0, le=1.0)
     discovered_entities: List[str] = Field(default_factory=list, description="Entities identified in the claim that may be new topics")
 
@@ -30,7 +31,7 @@ class ClaimExtractor:
     into individual units of verification.
     """
 
-    def extract(self, text: str, source_url: Optional[str] = None) -> ExtractionResponse:
+    def extract(self, text: str, source_url: Optional[str] = None, source_node_id: Optional[str] = None) -> ExtractionResponse:
         """Parses text and extracts a list of atomic claims.
         
         For the MVP, this uses a combination of sentence splitting and 
@@ -53,6 +54,7 @@ class ClaimExtractor:
                     statement=sentence,
                     support_text=sentence, 
                     source_url=source_url,
+                    source_node_id=source_node_id,
                     confidence=0.7, # Base confidence for heuristic extraction
                     discovered_entities=self._extract_entities(sentence)
                 )
