@@ -3,6 +3,7 @@ package dag
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Status represents the current execution state of a graph or node.
@@ -54,14 +55,36 @@ type Edge struct {
 
 // Graph represents the DAG structure.
 type Graph struct {
-	ID     string `json:"id"`
-	Nodes  []Node `json:"nodes"`
-	Edges  []Edge `json:"edges"`
-	Status Status `json:"status"`
+	ID       string            `json:"id"`
+	Nodes    []Node            `json:"nodes"`
+	Edges    []Edge            `json:"edges"`
+	Status   Status            `json:"status"`
+	Metadata map[string]string `json:"metadata"`
 }
 
 // ReceiveSignal processes an incoming signal.
 func (g *Graph) ReceiveSignal(sig Signal) error {
+	if sig.Type != "ENTITY_DISCOVERY" {
+		return nil
+	}
+
+	entity, ok := sig.Payload["entity"]
+	if !ok {
+		return fmt.Errorf("signal payload missing 'entity'")
+	}
+
+	// MVP Relevance Check: Simple containment
+	goal := g.Metadata["goal"]
+	if goal != "" {
+		// Check if entity is mentioned in goal or vice versa (simplistic MVP)
+		isRelevant := strings.Contains(strings.ToLower(goal), strings.ToLower(entity)) ||
+			strings.Contains(strings.ToLower(entity), strings.ToLower(goal))
+		
+		if !isRelevant {
+			return fmt.Errorf("entity '%s' not relevant to goal '%s'", entity, goal)
+		}
+	}
+	
 	return nil
 }
 
