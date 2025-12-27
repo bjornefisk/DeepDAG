@@ -18,6 +18,13 @@ const (
 	StatusCancelled Status = "CANCELLED"
 )
 
+// Signal represents an external event or discovery that might affect the graph.
+type Signal struct {
+	Type    string            `json:"type"`
+	Payload map[string]string `json:"payload"`
+	Source  string            `json:"source"`
+}
+
 // Node represents a step in the processing pipeline.
 type Node struct {
 	ID             string            `json:"id"`
@@ -51,6 +58,11 @@ type Graph struct {
 	Nodes  []Node `json:"nodes"`
 	Edges  []Edge `json:"edges"`
 	Status Status `json:"status"`
+}
+
+// ReceiveSignal processes an incoming signal.
+func (g *Graph) ReceiveSignal(sig Signal) error {
+	return nil
 }
 
 // ValidationError represents an aggregation of validation issues.
