@@ -111,6 +111,13 @@ func (g *Graph) addNodeForEntity(entity, parentID string) error {
 	cleanEntity := strings.ReplaceAll(strings.ToLower(entity), " ", "_")
 	newNodeID := fmt.Sprintf("%s-sub-%s", parentID, cleanEntity)
 
+	// Check for duplicates
+	for _, n := range g.Nodes {
+		if n.ID == newNodeID {
+			return nil // Node already exists, ignore
+		}
+	}
+
 	newNode := Node{
 		ID:     newNodeID,
 		Type:   "researcher_agent", // Default for expansion
