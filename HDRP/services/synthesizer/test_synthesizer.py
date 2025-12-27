@@ -28,10 +28,11 @@ class TestSynthesizerService(unittest.TestCase):
         
         self.assertIn("# Research Report", report)
         self.assertIn("Quantum computing uses qubits.", report)
-        self.assertIn("[Source](https://example.com/q1)", report)
+        # Updated: synthesizer now shows citations inline, not [Source] links
+        self.assertIn("[1]", report)
         self.assertIn("## Bibliography", report)
-        self.assertIn("- https://example.com/q1", report)
-        self.assertIn("- https://example.com/q2", report)
+        self.assertIn("https://example.com/q1", report)
+        self.assertIn("https://example.com/q2", report)
 
     def test_synthesize_filters_invalid_claims(self):
         valid_claim = AtomicClaim(statement="Valid Fact", source_url="http://valid.com")
@@ -77,7 +78,9 @@ class TestSynthesizerService(unittest.TestCase):
         results = [self._wrap(claim)]
         report = self.synthesizer.synthesize(results)
         self.assertIn("Fact without support snippet.", report)
-        self.assertNotIn("> *Support:", report) # Should not generate support block
+        # Updated: synthesizer now shows support text as quotes, not "Support:" prefix
+        # If support_text is missing or equals statement, no quote block is shown
+        self.assertNotIn("> *\"", report) # Should not generate support block for missing support
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,9 +7,9 @@ class TestReportSections(unittest.TestCase):
         self.synthesizer = SynthesizerService()
 
     def test_custom_report_sections(self):
-        """Test customized report generation with mapped sections and TOC."""
+        """Validates section mapping, TOC generation, and numbered citations."""
         
-        # Claims from different nodes
+        # Construct test claims from distinct DAG nodes
         claim_a = AtomicClaim(
             statement="Quantum supremacy achieved.",
             support_text="Google claimed quantum supremacy.",
@@ -28,7 +28,6 @@ class TestReportSections(unittest.TestCase):
         )
         res_b = CritiqueResult(claim=claim_b, is_valid=True, reason="Verified")
 
-        # Context for synthesis
         context = {
             "report_title": "State of Quantum Computing 2025",
             "introduction": "This report summarizes key findings.",
@@ -38,41 +37,48 @@ class TestReportSections(unittest.TestCase):
             }
         }
 
-        # Synthesize
         report = self.synthesizer.synthesize([res_a, res_b], context=context)
         
         print("\nGenerated Sectioned Report:\n", report)
 
-        # Assertions
-        # 1. Title
+        # Verify report structure and citation format
+        # Title and introduction
         self.assertIn("# State of Quantum Computing 2025", report)
-        
-        # 2. Introduction
         self.assertIn("This report summarizes key findings.", report)
         
-        # 3. Table of Contents
+        # TOC with anchor links
         self.assertIn("## Table of Contents", report)
         self.assertIn("- [Milestones](#milestones)", report)
         self.assertIn("- [Challenges](#challenges)", report)
         
-        # 4. Section Headers
+        # Section headers from node mapping
         self.assertIn("## Milestones", report)
         self.assertIn("## Challenges", report)
         
-        # 5. Content
-        self.assertIn("Quantum supremacy achieved.", report)
-        self.assertIn("Qubits are fragile.", report)
+        # Inline citations embedded in claims (updated format: no period after citation)
+        self.assertIn("Quantum supremacy achieved. [1]", report)
+        self.assertIn("Qubits are fragile. [2]", report)
+        self.assertIn("[1]", report)
+        self.assertIn("[2]", report)
+        
+        # Numbered bibliography entries with titles (updated format)
+        self.assertIn("## Bibliography", report)
+        self.assertIn("http://google.com/quantum", report)
+        self.assertIn("http://ibm.com/quantum", report)
 
     def test_default_fallback(self):
-        """Test that it behaves reasonably without context."""
-        claim = AtomicClaim(statement="A fact.", source_node_id="node_x", confidence=1.0)
+        """Validates default behavior when no context is provided."""
+        claim = AtomicClaim(statement="A fact.", source_url="http://example.com/source", source_node_id="node_x", confidence=1.0)
         res = CritiqueResult(claim=claim, is_valid=True, reason="ok")
         
         report = self.synthesizer.synthesize([res])
         
         self.assertIn("# Research Report", report)
         self.assertIn("## Node: node_x", report)
-        self.assertNotIn("## Table of Contents", report) # Only 1 section
+        self.assertNotIn("## Table of Contents", report)  # Single section: no TOC
+        # Updated format: no period after citation
+        self.assertIn("A fact. [1]", report)
+        self.assertIn("http://example.com/source", report)
 
 if __name__ == "__main__":
     unittest.main()

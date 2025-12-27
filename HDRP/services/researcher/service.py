@@ -62,10 +62,26 @@ class ResearcherService:
 
         all_claims = []
         
-        for result in search_response.results:
+        for idx, result in enumerate(search_response.results, 1):
             # For the MVP standard, we extract claims directly from the search snippets.
             # This ensures that 'support_text' is always tied to a verified search result.
-            extraction = self.extractor.extract(result.snippet, source_url=result.url, source_node_id=source_node_id)
+            # We now pass full traceability metadata: title and search rank position.
+            extraction = self.extractor.extract(
+                result.snippet, 
+                source_url=result.url, 
+                source_node_id=source_node_id,
+                source_title=result.title,
+                source_rank=idx
+            )
             all_claims.extend(extraction.claims)
+            
+            # Log traceability metadata for debugging
+            if extraction.claims:
+                self.logger.log("claims_extracted", {
+                    "source_title": result.title,
+                    "source_url": result.url,
+                    "source_rank": idx,
+                    "claims_count": len(extraction.claims)
+                })
             
         return all_claims

@@ -1,17 +1,21 @@
 import unittest
+from datetime import datetime
 from HDRP.services.critic.service import CriticService
 from HDRP.services.shared.claims import AtomicClaim
 
 class TestCriticService(unittest.TestCase):
     def setUp(self):
         self.critic = CriticService()
+        # Standard timestamp for test claims
+        self.test_timestamp = datetime.utcnow().isoformat() + "Z"
 
     def test_verify_valid_claim(self):
         claim = AtomicClaim(
             statement="Quantum computing uses qubits for calculations.",
             support_text="Quantum computing uses qubits for calculations.",
             source_url="https://example.com/sky",
-            confidence=1.0
+            confidence=1.0,
+            extracted_at=self.test_timestamp
         )
         # Task should be relevant
         results = self.critic.verify([claim], task="explain quantum computing")
@@ -23,7 +27,8 @@ class TestCriticService(unittest.TestCase):
             statement="It might be possible that quantum computers are fast.",
             support_text="Quantum computers demonstrate exponential speedup on specific algorithms.",
             source_url="https://example.com/q",
-            confidence=1.0
+            confidence=1.0,
+            extracted_at=self.test_timestamp
         )
         results = self.critic.verify([claim], task="quantum stuff")
         self.assertFalse(results[0].is_valid)
@@ -34,7 +39,8 @@ class TestCriticService(unittest.TestCase):
             statement="NVIDIA revenue grew, therefore they are the market leader.",
             support_text="NVIDIA reported record revenue growth this quarter.",
             source_url="https://example.com/n",
-            confidence=1.0
+            confidence=1.0,
+            extracted_at=self.test_timestamp
         )
         results = self.critic.verify([claim], task="nvidia market")
         self.assertFalse(results[0].is_valid)
@@ -45,7 +51,8 @@ class TestCriticService(unittest.TestCase):
             statement="The CEO of Apple is actually a robot from Mars.",
             support_text="Tim Cook spoke at the product launch event today.",
             source_url="https://example.com/a",
-            confidence=1.0
+            confidence=1.0,
+            extracted_at=self.test_timestamp
         )
         results = self.critic.verify([claim], task="apple ceo")
         self.assertFalse(results[0].is_valid)
@@ -56,7 +63,8 @@ class TestCriticService(unittest.TestCase):
             statement="The sky is blue.",
             support_text="The sky is blue because of Rayleigh scattering.",
             source_url=None,
-            confidence=1.0
+            confidence=1.0,
+            extracted_at=self.test_timestamp
         )
         results = self.critic.verify([claim], task="sky color")
         self.assertFalse(results[0].is_valid)
@@ -67,7 +75,8 @@ class TestCriticService(unittest.TestCase):
             statement="The sky is blue and very beautiful.",
             support_text="Sky.",
             source_url="https://example.com/sky",
-            confidence=1.0
+            confidence=1.0,
+            extracted_at=self.test_timestamp
         )
         results = self.critic.verify([claim], task="sky color")
         self.assertFalse(results[0].is_valid)
@@ -78,7 +87,8 @@ class TestCriticService(unittest.TestCase):
             statement="Quantum computing uses qubits for all its calculations.",
             support_text="Quantum computing uses qubits for calculations, which are fundamental units.",
             source_url="https://example.com/fast",
-            confidence=1.0
+            confidence=1.0,
+            extracted_at=self.test_timestamp
         )
         results = self.critic.verify([claim], task="quantum computing")
         self.assertFalse(results[0].is_valid)
@@ -89,7 +99,8 @@ class TestCriticService(unittest.TestCase):
             statement="Bananas are rich in potassium and vitamins.",
             support_text="Bananas are rich in potassium and vitamins.",
             source_url="https://example.com/fruit",
-            confidence=1.0
+            confidence=1.0,
+            extracted_at=self.test_timestamp
         )
         # Task is about quantum computing, claim is about bananas
         results = self.critic.verify([claim], task="research quantum computing")
@@ -105,7 +116,8 @@ class TestCriticService(unittest.TestCase):
             statement="The test failed because of a bug.",
             support_text="The test failed. A bug was found later.",
             source_url="https://example.com/test",
-            confidence=1.0
+            confidence=1.0,
+            extracted_at=self.test_timestamp
         )
         # "because" is now an indicator. It is in statement but not in support text.
         results = self.critic.verify([claim], task="test failure")
@@ -121,7 +133,8 @@ class TestCriticService(unittest.TestCase):
             statement="The sky is green and red.",
             support_text="The sky is blue today.",
             source_url="https://example.com/sky",
-            confidence=1.0
+            confidence=1.0,
+            extracted_at=self.test_timestamp
         )
         # We expect this to fail with the improved logic
         results = self.critic.verify([claim], task="sky color")

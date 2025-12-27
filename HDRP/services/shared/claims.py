@@ -1,5 +1,6 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field
+from datetime import datetime
 import uuid
 
 class AtomicClaim(BaseModel):
@@ -11,6 +12,12 @@ class AtomicClaim(BaseModel):
     source_node_id: Optional[str] = Field(None, description="The ID of the DAG node that generated this claim")
     confidence: float = Field(0.0, ge=0.0, le=1.0)
     discovered_entities: List[str] = Field(default_factory=list, description="Entities identified in the claim that may be new topics")
+    
+    # Traceability fields for MVP standard
+    extracted_at: Optional[str] = Field(None, description="ISO timestamp when claim was extracted")
+    source_title: Optional[str] = Field(None, description="Title of the source document")
+    source_rank: Optional[int] = Field(None, description="Position in search results (1-indexed)")
+    support_offset: Optional[int] = Field(None, description="Character offset where support_text begins in source")
 
 class CritiqueResult(BaseModel):
     """Result of verifying a single atomic claim."""
@@ -31,15 +38,26 @@ class ClaimExtractor:
     into individual units of verification.
     """
 
-    def extract(self, text: str, source_url: Optional[str] = None, source_node_id: Optional[str] = None) -> ExtractionResponse:
+    def extract(self, text: str, source_url: Optional[str] = None, source_node_id: Optional[str] = None,
+                source_title: Optional[str] = None, source_rank: Optional[int] = None) -> ExtractionResponse:
         """Parses text and extracts a list of atomic claims.
         
         For the MVP, this uses a combination of sentence splitting and 
         heuristic filtering. In production, this would be backed by a 
         specialized LLM prompt.
+        
+        Args:
+            text: The text to extract claims from
+            source_url: URL of the source document
+            source_node_id: DAG node ID that generated this extraction
+            source_title: Title of the source document for better traceability
+            source_rank: Position in search results (1-indexed)
         """
         if not text or len(text.strip()) == 0:
             return ExtractionResponse(source_text=text, claims=[])
+
+        # Generate timestamp once for all claims in this extraction
+        extraction_time = datetime.utcnow().isoformat() + "Z"
 
         # MVP Heuristic: Split by sentences and filter for 'fact-like' statements.
         sentences = self._split_sentences(text)
@@ -48,6 +66,9 @@ class ClaimExtractor:
         for sentence in sentences:
             sentence = sentence.strip()
             if self._is_likely_factual(sentence):
+                # Calculate the character offset where this sentence appears in the original text
+                support_offset = text.find(sentence) if sentence in text else None
+                
                 # For the MVP, the support text is the sentence itself found in the source.
                 # In more advanced versions, this might include surrounding sentences for context.
                 claim = AtomicClaim(
@@ -56,7 +77,11 @@ class ClaimExtractor:
                     source_url=source_url,
                     source_node_id=source_node_id,
                     confidence=0.7, # Base confidence for heuristic extraction
-                    discovered_entities=self._extract_entities(sentence)
+                    discovered_entities=self._extract_entities(sentence),
+                    extracted_at=extraction_time,
+                    source_title=source_title,
+                    source_rank=source_rank,
+                    support_offset=support_offset
                 )
                 extracted_claims.append(claim)
 
