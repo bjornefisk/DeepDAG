@@ -1,4 +1,5 @@
 from typing import List, Optional
+import time
 from HDRP.tools.search.base import SearchProvider, SearchError
 from HDRP.services.shared.claims import ClaimExtractor, AtomicClaim
 from HDRP.services.shared.logger import ResearchLogger
@@ -20,15 +21,36 @@ class ResearcherService:
         
         Each claim will include the source URL and the support text where it was found.
         """
-        try:
-            search_response = self.search_provider.search(query)
-        except Exception as e:
-            self.logger.log("research_failed", {
-                "query": query,
-                "error": str(e),
-                "type": type(e).__name__
-            })
-            raise e
+        max_retries = 2
+        search_response = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                search_response = self.search_provider.search(query)
+                break
+            except SearchError as e:
+                if attempt < max_retries:
+                    self.logger.log("research_retry", {
+                        "query": query,
+                        "error": str(e),
+                        "attempt": attempt + 1
+                    })
+                    time.sleep(1)
+                    continue
+                else:
+                    self.logger.log("research_failed", {
+                        "query": query,
+                        "error": str(e),
+                        "type": type(e).__name__
+                    })
+                    raise e
+            except Exception as e:
+                self.logger.log("research_failed", {
+                    "query": query,
+                    "error": str(e),
+                    "type": type(e).__name__
+                })
+                raise e
 
         if not search_response.results:
             self.logger.log("research_failed", {
