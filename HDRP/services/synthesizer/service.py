@@ -1,5 +1,5 @@
 from typing import List
-from HDRP.services.shared.claims import AtomicClaim
+from HDRP.services.shared.claims import AtomicClaim, CritiqueResult
 
 class SynthesizerService:
     """Service responsible for composing the final research report.
@@ -8,11 +8,15 @@ class SynthesizerService:
     ensuring every fact is properly cited with its source URL.
     """
     
-    def synthesize(self, verified_claims: List[AtomicClaim]) -> str:
-        """Converts a list of verified claims into a markdown report with citations.
+    def synthesize(self, verification_results: List[CritiqueResult]) -> str:
+        """Converts a list of verification results into a markdown report with citations.
         
+        Only claims marked as valid (is_valid=True) are included in the report.
         Each statement is followed by a source link and the supporting text found by the researcher.
         """
+        # Enforce No Verification No Synthesis: Filter for valid claims only
+        verified_claims = [res.claim for res in verification_results if res.is_valid]
+        
         if not verified_claims:
             return "No verified information found."
             
