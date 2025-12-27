@@ -135,7 +135,13 @@ func (g *Graph) addNodeForEntity(entity, parentID string) error {
 		To:   newNodeID,
 	})
 
-	return nil
+	// Resume execution: Ensure graph is marked as running if it was finished/idle
+	if g.Status != StatusRunning {
+		g.Status = StatusRunning
+	}
+
+	// Trigger readiness evaluation to update new node state if possible
+	return g.EvaluateReadiness()
 }
 
 // ValidationError represents an aggregation of validation issues.
