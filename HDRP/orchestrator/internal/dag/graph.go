@@ -33,6 +33,7 @@ type Node struct {
 	Config         map[string]string `json:"config"`
 	Status         Status            `json:"status"`
 	RelevanceScore float64           `json:"relevance_score"`
+	Depth          int               `json:"depth"`
 }
 
 // Validate ensures the node represents a single, atomic unit of work.
@@ -89,6 +90,23 @@ func (g *Graph) ReceiveSignal(sig Signal) error {
 }
 
 func (g *Graph) addNodeForEntity(entity, parentID string) error {
+	// Find parent node
+	var parent *Node
+	for i := range g.Nodes {
+		if g.Nodes[i].ID == parentID {
+			parent = &g.Nodes[i]
+			break
+		}
+	}
+	if parent == nil {
+		return fmt.Errorf("parent node %s not found", parentID)
+	}
+
+	// MVP Depth Limit: Max depth 1 (allow one level of expansion)
+	if parent.Depth >= 1 {
+		return fmt.Errorf("max expansion depth reached for parent %s", parentID)
+	}
+
 	// Generate deterministic ID for the new node
 	cleanEntity := strings.ReplaceAll(strings.ToLower(entity), " ", "_")
 	newNodeID := fmt.Sprintf("%s-sub-%s", parentID, cleanEntity)
@@ -101,6 +119,7 @@ func (g *Graph) addNodeForEntity(entity, parentID string) error {
 			"goal": fmt.Sprintf("Research sub-topic: %s", entity),
 		},
 		RelevanceScore: 1.0, 
+		Depth:          parent.Depth + 1,
 	}
 
 	g.Nodes = append(g.Nodes, newNode)
