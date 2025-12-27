@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"hdrp/internal/logger"
 )
 
 // Status represents the current execution state of a graph or node.
@@ -139,6 +141,14 @@ func (g *Graph) addNodeForEntity(entity, parentID string) error {
 	if g.Status != StatusRunning {
 		g.Status = StatusRunning
 	}
+
+	// Log mutation
+	logger.LogEvent(nil, g.ID, "orchestrator", "node_added", map[string]interface{}{
+		"node_id":   newNodeID,
+		"parent_id": parentID,
+		"entity":    entity,
+		"depth":     newNode.Depth,
+	})
 
 	// Trigger readiness evaluation to update new node state if possible
 	return g.EvaluateReadiness()
