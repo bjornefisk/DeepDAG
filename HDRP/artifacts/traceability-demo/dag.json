@@ -1,0 +1,42 @@
+{
+  "nodes": [
+    {
+      "id": "root",
+      "type": "root",
+      "status": "SUCCEEDED",
+      "relevance_score": 1.0
+    },
+    {
+      "id": "quantum_research_2025",
+      "type": "researcher",
+      "status": "SUCCEEDED",
+      "relevance_score": 0.7999999999999999
+    },
+    {
+      "id": "critic_verify",
+      "type": "critic",
+      "status": "SUCCEEDED",
+      "relevance_score": 0.9
+    },
+    {
+      "id": "synthesizer_final",
+      "type": "synthesizer",
+      "status": "SUCCEEDED",
+      "relevance_score": 1.0
+    }
+  ],
+  "edges": [
+    {
+      "from": "root",
+      "to": "quantum_research_2025"
+    },
+    {
+      "from": "quantum_research_2025",
+      "to": "critic_verify"
+    },
+    {
+      "from": "critic_verify",
+      "to": "synthesizer_final"
+    }
+  ]
+}

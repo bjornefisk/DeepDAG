@@ -1,0 +1,46 @@
+[
+  {
+    "claim_id": "a3fbd046-1110-490c-afaa-4217a872d8e5",
+    "statement": "NIST has announced the first four quantum-resistant cryptographic algorithms...",
+    "support_text": "NIST has announced the first four quantum-resistant cryptographic algorithms...",
+    "source_url": "https://csrc.nist.gov/projects/post-quantum-cryptography",
+    "source_title": "NIST Post-Quantum Cryptography Standardization",
+    "source_rank": 2,
+    "source_node_id": "quantum_research_2025",
+    "extracted_at": "2025-12-27T19:43:15.070813Z",
+    "confidence": 0.7999999999999999
+  },
+  {
+    "claim_id": "ce82f0f0-d439-4023-9ec1-e8472d10b5ea",
+    "statement": "More discussions on quantum supremacy...",
+    "support_text": "More discussions on quantum supremacy...",
+    "source_url": "https://www.nature.com/articles/another-one",
+    "source_title": "Another Nature Article on Quantum",
+    "source_rank": 3,
+    "source_node_id": "quantum_research_2025",
+    "extracted_at": "2025-12-27T19:43:15.070945Z",
+    "confidence": 0.7999999999999999
+  },
+  {
+    "claim_id": "bac14e0c-8498-492b-8fd9-3c9d160cd1d3",
+    "statement": "This is a simulated search result description for the query 'Latest developments in quantum computing'.",
+    "support_text": "This is a simulated search result description for the query 'Latest developments in quantum computing'.",
+    "source_url": "https://example.com/search?q=Latest developments in quantum computing&id=0",
+    "source_title": "Result 1 for 'Latest developments in quantum computing'",
+    "source_rank": 4,
+    "source_node_id": "quantum_research_2025",
+    "extracted_at": "2025-12-27T19:43:15.071031Z",
+    "confidence": 0.7999999999999999
+  },
+  {
+    "claim_id": "5a850b1d-b946-4b32-b877-cf8605c18d20",
+    "statement": "This is a simulated search result description for the query 'Latest developments in quantum computing'.",
+    "support_text": "This is a simulated search result description for the query 'Latest developments in quantum computing'.",
+    "source_url": "https://test.org/search?q=Latest developments in quantum computing&id=1",
+    "source_title": "Result 2 for 'Latest developments in quantum computing'",
+    "source_rank": 5,
+    "source_node_id": "quantum_research_2025",
+    "extracted_at": "2025-12-27T19:43:15.071113Z",
+    "confidence": 0.7999999999999999
+  }
+]

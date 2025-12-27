@@ -1,0 +1,65 @@
+{
+  "bundle_info": {
+    "run_id": "traceability-demo",
+    "generated_at": "2025-12-27T19:43:15.072727Z",
+    "query": "Latest developments in quantum computing",
+    "report_title": "Quantum Computing: Recent Developments"
+  },
+  "statistics": {
+    "total_claims": 5,
+    "verified_claims": 4,
+    "rejected_claims": 1,
+    "unique_sources": 4,
+    "average_confidence": 0.8,
+    "research_period": {
+      "start": "2025-12-27T19:43:15.070813Z",
+      "end": "2025-12-27T19:43:15.071113Z"
+    }
+  },
+  "sources": [
+    {
+      "url": "https://csrc.nist.gov/projects/post-quantum-cryptography",
+      "title": "NIST Post-Quantum Cryptography Standardization",
+      "rank": 2,
+      "claims": 1
+    },
+    {
+      "url": "https://www.nature.com/articles/another-one",
+      "title": "Another Nature Article on Quantum",
+      "rank": 3,
+      "claims": 1
+    },
+    {
+      "url": "https://example.com/search?q=Latest developments in quantum computing&id=0",
+      "title": "Result 1 for 'Latest developments in quantum computing'",
+      "rank": 4,
+      "claims": 1
+    },
+    {
+      "url": "https://test.org/search?q=Latest developments in quantum computing&id=1",
+      "title": "Result 2 for 'Latest developments in quantum computing'",
+      "rank": 5,
+      "claims": 1
+    }
+  ],
+  "dag_nodes": {
+    "quantum_research_2025": 4
+  },
+  "rejection_summary": [
+    {
+      "claim_id": "216a12ac-8611-4a92-a537-acb9373bf5c9",
+      "reason": "REJECTED: Claim not relevant to task 'Latest developments in quantum computing' (no keyword overlap)",
+      "statement": "Shor's algorithm poses a significant threat to RSA encryption..."
+    }
+  ],
+  "provenance": {
+    "system": "HDRP",
+    "version": "1.0.0",
+    "pipeline": [
+      "Researcher",
+      "Critic",
+      "Synthesizer"
+    ],
+    "verification_enabled": true
+  }
+}
