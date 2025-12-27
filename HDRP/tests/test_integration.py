@@ -25,30 +25,34 @@ class TestHDRPIntegration(unittest.TestCase):
         
         # 2. Critic: Verify claims
         print("[Integration] Step 2: Verifying claims...")
-        verified_claims = []
+        critique_results = []
+        verified_claims_count = 0
         for claim in claims:
             # Check verification logic
             results = self.critic.verify([claim], task=query)
+            critique_results.extend(results)
+            
             # unpack list of tuples
             for res in results:
                 if res.is_valid:
-                    verified_claims.append(res.claim)
+                    verified_claims_count += 1
                 else:
                     # Optional: assert that rejection reasons are valid strings
                     self.assertTrue(len(res.reason) > 0)
         
-        print(f" -> Verified {len(verified_claims)} claims.")
-        self.assertGreater(len(verified_claims), 0, "Critic should verify at least some claims")
+        print(f" -> Verified {verified_claims_count} claims.")
+        self.assertGreater(verified_claims_count, 0, "Critic should verify at least some claims")
         
         # 3. Synthesizer: Generate Report
         print("[Integration] Step 3: Synthesizing report...")
-        report = self.synthesizer.synthesize(verified_claims)
+        report = self.synthesizer.synthesize(critique_results)
         
         # Validation
         self.assertIn("# Research Report", report)
         self.assertIn("Bibliography", report)
         # Check if the simulated "Nature" article is in the bibliography
         # The simulated provider returns "nature.com" for quantum queries
+        verified_claims = [res.claim for res in critique_results if res.is_valid]
         self.assertTrue(any("nature.com" in c.source_url for c in verified_claims))
         print(" -> Report generated successfully.")
 
