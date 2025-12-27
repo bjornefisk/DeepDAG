@@ -85,6 +85,30 @@ func (g *Graph) ReceiveSignal(sig Signal) error {
 		}
 	}
 	
+	return g.addNodeForEntity(entity, sig.Source)
+}
+
+func (g *Graph) addNodeForEntity(entity, parentID string) error {
+	// Generate deterministic ID for the new node
+	cleanEntity := strings.ReplaceAll(strings.ToLower(entity), " ", "_")
+	newNodeID := fmt.Sprintf("%s-sub-%s", parentID, cleanEntity)
+
+	newNode := Node{
+		ID:     newNodeID,
+		Type:   "researcher_agent", // Default for expansion
+		Status: StatusCreated,
+		Config: map[string]string{
+			"goal": fmt.Sprintf("Research sub-topic: %s", entity),
+		},
+		RelevanceScore: 1.0, 
+	}
+
+	g.Nodes = append(g.Nodes, newNode)
+	g.Edges = append(g.Edges, Edge{
+		From: parentID,
+		To:   newNodeID,
+	})
+
 	return nil
 }
 
