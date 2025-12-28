@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
-	"hdrp/internal/logger"
 )
 
 // Status represents the current execution state of a graph or node.
@@ -21,13 +19,6 @@ const (
 	StatusCancelled Status = "CANCELLED"
 )
 
-// Signal represents an external event or discovery that might affect the graph.
-type Signal struct {
-	Type    string            `json:"type"`
-	Payload map[string]string `json:"payload"`
-	Source  string            `json:"source"`
-}
-
 // Node represents a step in the processing pipeline.
 type Node struct {
 	ID             string            `json:"id"`
@@ -41,7 +32,7 @@ type Node struct {
 // Validate ensures the node represents a single, atomic unit of work.
 func (n *Node) Validate() error {
 	forbiddenKeys := []string{"steps", "tasks", "pipeline", "subgraph", "batch"}
-	
+
 	for _, forbidden := range forbiddenKeys {
 		if _, exists := n.Config[forbidden]; exists {
 			return fmt.Errorf("node '%s' violates atomicity: config key '%s' implies composite/non-atomic behavior", n.ID, forbidden)
@@ -56,6 +47,13 @@ type Edge struct {
 	To   string `json:"to"`
 }
 
+// Signal represents an event or message that can trigger graph modifications.
+type Signal struct {
+	Type    string            `json:"type"`
+	Source  string            `json:"source"`
+	Payload map[string]string `json:"payload"`
+}
+
 // Graph represents the DAG structure.
 type Graph struct {
 	ID       string            `json:"id"`
@@ -63,95 +61,6 @@ type Graph struct {
 	Edges    []Edge            `json:"edges"`
 	Status   Status            `json:"status"`
 	Metadata map[string]string `json:"metadata"`
-}
-
-// ReceiveSignal processes an incoming signal.
-func (g *Graph) ReceiveSignal(sig Signal) error {
-	if sig.Type != "ENTITY_DISCOVERY" {
-		return nil
-	}
-
-	entity, ok := sig.Payload["entity"]
-	if !ok {
-		return fmt.Errorf("signal payload missing 'entity'")
-	}
-
-	// MVP Relevance Check: Simple containment
-	goal := g.Metadata["goal"]
-	if goal != "" {
-		// Check if entity is mentioned in goal or vice versa (simplistic MVP)
-		isRelevant := strings.Contains(strings.ToLower(goal), strings.ToLower(entity)) ||
-			strings.Contains(strings.ToLower(entity), strings.ToLower(goal))
-		
-		if !isRelevant {
-			return fmt.Errorf("entity '%s' not relevant to goal '%s'", entity, goal)
-		}
-	}
-	
-	return g.addNodeForEntity(entity, sig.Source)
-}
-
-func (g *Graph) addNodeForEntity(entity, parentID string) error {
-	// Find parent node
-	var parent *Node
-	for i := range g.Nodes {
-		if g.Nodes[i].ID == parentID {
-			parent = &g.Nodes[i]
-			break
-		}
-	}
-	if parent == nil {
-		return fmt.Errorf("parent node %s not found", parentID)
-	}
-
-	// MVP Depth Limit: Max depth 1 (allow one level of expansion)
-	if parent.Depth >= 1 {
-		return fmt.Errorf("max expansion depth reached for parent %s", parentID)
-	}
-
-	// Generate deterministic ID for the new node
-	cleanEntity := strings.ReplaceAll(strings.ToLower(entity), " ", "_")
-	newNodeID := fmt.Sprintf("%s-sub-%s", parentID, cleanEntity)
-
-	// Check for duplicates
-	for _, n := range g.Nodes {
-		if n.ID == newNodeID {
-			return nil // Node already exists, ignore
-		}
-	}
-
-	newNode := Node{
-		ID:     newNodeID,
-		Type:   "researcher_agent", // Default for expansion
-		Status: StatusCreated,
-		Config: map[string]string{
-			"goal": fmt.Sprintf("Research sub-topic: %s", entity),
-		},
-		RelevanceScore: 1.0, 
-		Depth:          parent.Depth + 1,
-	}
-
-	g.Nodes = append(g.Nodes, newNode)
-	g.Edges = append(g.Edges, Edge{
-		From: parentID,
-		To:   newNodeID,
-	})
-
-	// Resume execution: Ensure graph is marked as running if it was finished/idle
-	if g.Status != StatusRunning {
-		g.Status = StatusRunning
-	}
-
-	// Log mutation
-	logger.LogEvent(nil, g.ID, "orchestrator", "node_added", map[string]interface{}{
-		"node_id":   newNodeID,
-		"parent_id": parentID,
-		"entity":    entity,
-		"depth":     newNode.Depth,
-	})
-
-	// Trigger readiness evaluation to update new node state if possible
-	return g.EvaluateReadiness()
 }
 
 // ValidationError represents an aggregation of validation issues.
@@ -209,7 +118,7 @@ func (g *Graph) Validate() error {
 		if e.From == e.To {
 			errs = append(errs, fmt.Sprintf("self-loop detected on node '%s'", e.From))
 		}
-		
+
 		// Build adjacency list only for valid nodes to avoid panic/issues later
 		if nodeMap[e.From] && nodeMap[e.To] {
 			adj[e.From] = append(adj[e.From], e.To)
@@ -235,7 +144,87 @@ func (g *Graph) Validate() error {
 	return nil
 }
 
-// checkCycles uses DFS to detect cycles in the graph.
+// ReceiveSignal processes incoming signals and modifies the graph accordingly.
+func (g *Graph) ReceiveSignal(sig Signal) error {
+	switch sig.Type {
+	case "ENTITY_DISCOVERY":
+		return g.handleEntityDiscovery(sig)
+	default:
+		// Ignore unknown signals
+		return nil
+	}
+}
+
+// handleEntityDiscovery processes entity discovery signals.
+func (g *Graph) handleEntityDiscovery(sig Signal) error {
+	entity, ok := sig.Payload["entity"]
+	if !ok {
+		return errors.New("entity discovery signal missing 'entity' in payload")
+	}
+
+	// Check relevance
+	goal, ok := g.Metadata["goal"]
+	if !ok {
+		return errors.New("graph missing 'goal' in metadata")
+	}
+	if !strings.Contains(goal, entity) && !strings.Contains(entity, goal) {
+		return fmt.Errorf("entity '%s' not relevant to goal '%s'", entity, goal)
+	}
+
+	// Check for duplicates
+	for _, n := range g.Nodes {
+		if n.Type == "agent" && n.Config["entity"] == entity {
+			return nil // Duplicate, ignore
+		}
+	}
+
+	// Check depth limit
+	sourceNode := g.findNode(sig.Source)
+	if sourceNode == nil {
+		return fmt.Errorf("source node '%s' not found", sig.Source)
+	}
+	if sourceNode.Depth >= 1 {
+		return errors.New("max expansion depth reached")
+	}
+
+	// Add node
+	newNodeID := fmt.Sprintf("%s-%s", sig.Source, entity)
+	newNode := Node{
+		ID:             newNodeID,
+		Type:           "agent",
+		Config:         map[string]string{"entity": entity},
+		Status:         StatusCreated,
+		RelevanceScore: 1.0, // Placeholder
+		Depth:          sourceNode.Depth + 1,
+	}
+	g.Nodes = append(g.Nodes, newNode)
+
+	// Add edge
+	g.Edges = append(g.Edges, Edge{From: sig.Source, To: newNodeID})
+
+	// Evaluate readiness
+	if err := g.EvaluateReadiness(); err != nil {
+		return err
+	}
+
+	// Resume if succeeded
+	if g.Status == StatusSucceeded {
+		g.Status = StatusRunning
+	}
+
+	return nil
+}
+
+// findNode finds a node by ID.
+func (g *Graph) findNode(id string) *Node {
+	for i := range g.Nodes {
+		if g.Nodes[i].ID == id {
+			return &g.Nodes[i]
+		}
+	}
+	return nil
+}
+
 func checkCycles(nodes []Node, adj map[string][]string) error {
 	visited := make(map[string]bool)
 	recursionStack := make(map[string]bool)
@@ -280,7 +269,7 @@ func checkDepth(nodes []Node, adj map[string][]string, limit int) error {
 		if d, ok := memo[id]; ok {
 			return d
 		}
-		
+
 		maxChildDepth := 0
 		for _, neighbor := range adj[id] {
 			d := getDepth(neighbor)
@@ -288,7 +277,7 @@ func checkDepth(nodes []Node, adj map[string][]string, limit int) error {
 				maxChildDepth = d
 			}
 		}
-		
+
 		depth := 1 + maxChildDepth
 		memo[id] = depth
 		return depth
