@@ -1,5 +1,5 @@
 # HDRP Source
 
-This directory contains the source code for the **Hierarchical Deep Research Planner**.
+Core implementation of the **Hierarchical Deep Research Planner**. This directory contains the orchestrator (Go), microservices (Python), gRPC definitions, evaluation tools, and CLI.
 
-Please refer to the [Root README](../../README.md) for architecture and usage documentation.
+**See the [Root README](../../README.md) for architecture overview and high-level documentation.**

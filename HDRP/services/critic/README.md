@@ -1,13 +1,11 @@
-# Critic Agent (Verifier)
+# Critic Agent
 
-## Responsibility
-Acts as the adversarial gatekeeper for information entering the system.
+Adversarial gatekeeper that verifies claims against source text.
 
-## Interface
-- **Input:** `Claim`, `SourceURL`, `SupportingText`
-- **Output:** `Verified (bool)`, `Critique (string)`
+**Input:** Claim, SourceURL, SupportingText  
+**Output:** Verified (bool), Critique (string)
 
-## Verification Logic
-1.  **Entailment:** Does the `SupportingText` actually support the `Claim`?
-2.  **Relevance:** Is the `Claim` relevant to the parent Node's objective?
-3.  **Grounding:** Does the URL exist and match the content (if checkable)?
+Validates:
+1. Entailment — Does supporting text entail the claim?
+2. Relevance — Does the claim serve the parent node's objective?
+3. Grounding — Is the source URL valid and content-matched?

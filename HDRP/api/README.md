@@ -1,23 +1,17 @@
-# API Definitions (gRPC/Protobuf)
+# gRPC Service Definitions
 
-This directory contains the canonical Protocol Buffer definitions (`.proto`) that define the interface between the Go Orchestrator and Python Microservices.
+Protocol Buffer definitions for the polyglot interface between Go Orchestrator and Python Microservices.
 
-## Service Contracts
-
-The system relies on strict strict typing across the polyglot boundary.
-
-- **`hdrp.proto`**: Defines the `Planner`, `Worker`, `Critic`, and `Synthesizer` services.
+- **`hdrp.proto`**: Service contracts for Planner, Worker, Critic, and Synthesizer
 
 ## Code Generation
 
-**Do not edit generated files manually.**
+Do not edit generated files manually.
 
-### Go (Orchestrator)
 ```bash
+# Go
 protoc --go_out=. --go-grpc_out=. proto/hdrp.proto
-```
 
-### Python (Services)
-```bash
+# Python
 python -m grpc_tools.protoc -Iproto --python_out=../services/shared --grpc_python_out=../services/shared proto/hdrp.proto
 ```

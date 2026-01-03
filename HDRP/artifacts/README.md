@@ -1,11 +1,11 @@
-# Artifact Bundles
+# Generated Artifacts
 
-This directory contains generated research artifact bundles.
+Research output bundles organized by run_id.
 
-Each subdirectory corresponds to a run_id and contains:
-- report.md: Human-like research report
-- dag.json: DAG structure
-- metadata.json: Bundle metadata
-- claims.json: Structured claims data
+Each bundle contains:
+- `report.md` — User-facing research report
+- `dag.json` — Execution DAG
+- `metadata.json` — Run metadata and summary
+- `claims.json` — Verified claims with attribution
 
-See HDRP/services/synthesizer/ARTIFACT_BUNDLE_README.md for details.
+See `HDRP/services/synthesizer/ARTIFACT_BUNDLE_README.md` for the artifact bundle format.

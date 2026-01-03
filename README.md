@@ -4,18 +4,11 @@
 
 HDRP is a research engine designed to mitigate **trajectory drift** in autonomous agents. It replaces standard flat ReAct loops with a **hierarchical, verifiable Directed Acyclic Graph (DAG)**, enforcing global constraints on long-horizon reasoning tasks.
 
-## Abstract
+## Problem
 
-Current open-ended agents suffer from a fundamental control problem: without hierarchical structure, the probability of diverging from the primary objective increases with each reasoning step. HDRP addresses this by decoupling **Planning**, **Execution**, and **Verification** into specialized, adversarial components.
+Standard ReAct agents lack hierarchical structure: without explicit state management and verification, errors compound and objectives drift. HDRP solves this by decoupling **Planning**, **Execution**, and **Verification** into specialized components.
 
-## Core Problem: The Failure of ReAct
-
-Standard ReAct loops (`THINK` → `SEARCH` → `ACT`) function as state-limited random walks.
-1.  **Context Pollution:** Irrelevant search artifacts saturate the context window.
-2.  **Loss of Global Objective:** The agent optimizes for the local next step rather than the global goal.
-3.  **Lack of Rollback:** Errors in early steps propagate unchecked, compounding into hallucinations.
-
-**Thesis:** Deep research is a graph traversal problem, not a sequence generation problem. It requires explicit state management (Go) and semantic reasoning (Python).
+**Core insight:** Deep research is a graph traversal problem requiring explicit state management (Go) and semantic reasoning (Python).
 
 ## System Architecture
 
@@ -34,22 +27,14 @@ HDRP implements a **compound AI system** using a polyglot architecture.
 
 ## Key Mechanisms
 
-### 1. Dynamic Graph Expansion (Runtime Mutation)
-Static plans are insufficient for exploratory domains. HDRP supports **online planning**:
-*   The **Researcher** identifies new entities or dependencies during execution.
-*   The **Principal** evaluates these signals against the global objective.
-*   New sub-graphs are injected into the DAG at runtime, allowing the plan to evolve without losing the root objective.
+### Dynamic Graph Expansion
+The **Researcher** identifies new entities during execution, which the **Principal** evaluates against the global objective. New sub-graphs are injected at runtime, allowing the plan to evolve without losing context.
 
-### 2. Explicit Verification (The Critic)
-To combat hallucination, we implement an adversarial "Critic" loop:
-*   **Invariant:** No claim propagates to the Synthesizer without passing verification.
-*   **Method:** The Critic verifies that `supporting_text` strictly entails `claim` and originates from `source_url`.
-*   **Reflexion:** Rejected claims trigger a retry logic with updated constraints.
+### Explicit Verification
+An adversarial **Critic** validates that each claim's supporting text entails the claim and originates from the cited source. Unverified claims are rejected and retried with updated constraints.
 
-### 3. Traceability & Evaluation
-We adopt an **evals-first** methodology.
-*   **Structured Logging:** All state transitions (DAG mutations, claim verifications) are serialized to `HDRP/logs/<run_id>.jsonl`.
-*   **Reproducibility:** Deterministic DAG traversals allow for A/B testing of planner logic.
+### Structured Logging
+All state transitions (DAG mutations, verifications) are serialized to `HDRP/logs/<run_id>.jsonl` for reproducibility and A/B testing.
 
 ## Directory Structure
 
