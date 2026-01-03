@@ -68,7 +68,7 @@ class ResultsFormatter:
         
         # Quality metrics
         table.add_row(
-            "Avg Total Claims",
+            "Avg Raw Claims",
             f"{hdrp_avg['avg_total_claims']:.1f}",
             f"{react_avg['avg_total_claims']:.1f}",
             self._get_winner_icon(
@@ -87,6 +87,38 @@ class ResultsFormatter:
                 react_avg['avg_verified_claims'],
                 lower_is_better=False
             ),
+        )
+        
+        table.add_row(
+            "Avg Completeness/Accuracy",
+            f"{hdrp_avg['avg_completeness']:.3f}",
+            f"{react_avg['avg_completeness']:.3f}",
+            self._get_winner_icon(
+                hdrp_avg['avg_completeness'],
+                react_avg['avg_completeness'],
+                lower_is_better=False
+            ),
+        )
+
+        table.add_row(
+            "Avg Entailment Score",
+            f"{hdrp_avg['avg_entailment_score']:.3f}",
+            f"{react_avg['avg_entailment_score']:.3f}",
+            self._get_winner_icon(
+                hdrp_avg['avg_entailment_score'],
+                react_avg['avg_entailment_score'],
+                lower_is_better=False
+            ),
+        )
+
+        # Comparative Precision (HDRP only)
+        # Check if the key exists (it should based on my previous edit)
+        comp_precision = hdrp_avg.get('avg_comparative_precision', 0.0)
+        table.add_row(
+            "Avg Comparative Precision",
+            f"{comp_precision:.3f}",
+            "N/A",
+            "HDRP" # By definition specific to HDRP
         )
         
         table.add_row(

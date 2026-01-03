@@ -118,12 +118,17 @@ class ComparisonRunner:
         
         # Record search call (ReAct makes 1 search call)
         collector.record_search_call(0.0)  # Latency tracked internally
+
+        # Verify claims to calculate extraction accuracy
+        critic = CriticService(run_id=run_id)
+        critique_results = critic.verify(result.claims, task=question)
         
         # Collect metrics
         metrics = collector.collect_from_react(
             query=question,
             result=result,
             run_id=run_id,
+            critique_results=critique_results,
         )
         
         return metrics

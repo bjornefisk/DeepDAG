@@ -117,19 +117,31 @@ class CriticService:
                             rejection_reason = "REJECTED: Key terms missing from source"
 
             # Relevance check: multi-level (direct match → semantic → rank-based trust)
+            entailment_score = 0.0
             if not rejection_reason:
                 claim_tokens = set(w for w in filtered_tokens if w not in STOP_WORDS)
+                if not claim_tokens:
+                     claim_tokens = set(self._tokenize(lower_statement))
+
                 relevance_overlap = task_tokens.intersection(claim_tokens)
+                
+                # Calculate entailment score based on overlap
+                if claim_tokens:
+                    entailment_score = len(relevance_overlap) / len(claim_tokens)
                 
                 if not relevance_overlap:
                     # Check semantic connection between support and task
                     support_key = self._extract_key_terms(lower_support, STOP_WORDS)
                     task_key = self._extract_key_terms(task.lower(), STOP_WORDS)
                     
-                    if not support_key.intersection(task_key):
+                    if support_key.intersection(task_key):
+                        # Boost entailment if semantic connection exists via support text
+                        entailment_score = max(entailment_score, 0.5)
+                    else:
                         # Trust top-2 ranked results (search engines filter by relevance)
                         if claim.source_rank and claim.source_rank > 2:
                             rejection_reason = "REJECTED: Not relevant (low rank, no keyword overlap)"
+                            entailment_score = 0.0
 
             if rejection_reason:
                 self.logger.log("claim_rejected", {
@@ -137,11 +149,21 @@ class CriticService:
                     "statement": claim.statement[:50] + "..."
                 })
                 claim.confidence = 0.0
-                results.append(CritiqueResult(claim=claim, is_valid=False, reason=rejection_reason))
+                results.append(CritiqueResult(
+                    claim=claim, 
+                    is_valid=False, 
+                    reason=rejection_reason,
+                    entailment_score=entailment_score
+                ))
             else:
                 if claim.confidence < 0.9:
                     claim.confidence = min(claim.confidence + 0.1, 1.0)
-                results.append(CritiqueResult(claim=claim, is_valid=True, reason="Verified"))
+                results.append(CritiqueResult(
+                    claim=claim, 
+                    is_valid=True, 
+                    reason="Verified",
+                    entailment_score=entailment_score
+                ))
             
         return results
     

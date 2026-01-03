@@ -35,14 +35,20 @@ class QualityMetrics:
     """Quality and accuracy metrics."""
     
     total_claims_extracted: int = 0
+    raw_claims_extracted: int = 0
     verified_claims_count: int = 0
+    completeness: float = 0.0  # verified / raw
+    entailment_score: float = 0.0  # avg entailment of verified claims
     claims_per_source: float = 0.0
     unique_source_urls: int = 0
     
     def to_dict(self) -> Dict:
         return {
             "total_claims_extracted": self.total_claims_extracted,
+            "raw_claims_extracted": self.raw_claims_extracted,
             "verified_claims_count": self.verified_claims_count,
+            "completeness": round(self.completeness, 3),
+            "entailment_score": round(self.entailment_score, 3),
             "claims_per_source": round(self.claims_per_source, 2),
             "unique_source_urls": self.unique_source_urls,
         }
@@ -128,6 +134,7 @@ class MetricsCollector:
         query: str,
         result: ReActRunResult,
         run_id: str,
+        critique_results: Optional[List[CritiqueResult]] = None,
     ) -> SystemMetrics:
         """Collect metrics from a ReAct agent run."""
         execution_time_ms = (time.time() - self.start_time) * 1000 if self.start_time else 0.0
@@ -135,6 +142,26 @@ class MetricsCollector:
         # Extract claims and analyze
         claims = result.claims
         unique_sources = self._count_unique_sources(claims)
+        
+        # Calculate verification metrics if available
+        verified_count = 0
+        entailment_sum = 0.0
+        if critique_results:
+            verified_claims = [c for c in critique_results if c.is_valid]
+            verified_count = len(verified_claims)
+            if verified_count > 0:
+                entailment_sum = sum(c.entailment_score for c in verified_claims)
+        else:
+            # If no verification, assume all valid (legacy behavior) or 0? 
+            # User wants to separate metrics. If no verification run, we can't claim verified.
+            # But for backward compatibility if critique_results is None, we might set verified=0
+            # However, ReActAgent by default doesn't produce critique_results.
+            # If we don't pass them, verified_count will be 0.
+            pass
+        
+        raw_count = len(claims)
+        completeness = verified_count / raw_count if raw_count > 0 else 0.0
+        avg_entailment = entailment_sum / verified_count if verified_count > 0 else 0.0
         
         # Performance metrics
         performance = PerformanceMetrics(
@@ -145,16 +172,19 @@ class MetricsCollector:
         
         # Quality metrics
         quality = QualityMetrics(
-            total_claims_extracted=len(claims),
-            verified_claims_count=len(claims),  # ReAct has no separate verification
-            claims_per_source=len(claims) / unique_sources if unique_sources > 0 else 0.0,
+            total_claims_extracted=raw_count,
+            raw_claims_extracted=raw_count,
+            verified_claims_count=verified_count,
+            completeness=completeness,
+            entailment_score=avg_entailment,
+            claims_per_source=raw_count / unique_sources if unique_sources > 0 else 0.0,
             unique_source_urls=unique_sources,
         )
         
         # Trajectory metrics
         trajectory = TrajectoryMetrics(
-            relevant_claims_ratio=1.0,  # ReAct assumes all claims are relevant
-            search_efficiency=len(claims) / self.search_call_count if self.search_call_count > 0 else 0.0,
+            relevant_claims_ratio=completeness,  # Use calculated completeness
+            search_efficiency=raw_count / self.search_call_count if self.search_call_count > 0 else 0.0,
         )
         
         # Hallucination metrics
@@ -181,7 +211,16 @@ class MetricsCollector:
         execution_time_ms = (time.time() - self.start_time) * 1000 if self.start_time else 0.0
         
         # Separate verified and rejected claims
-        verified_claims = [cr.claim for cr in critique_results if cr.is_valid]
+        verified_results = [cr for cr in critique_results if cr.is_valid]
+        verified_claims = [cr.claim for cr in verified_results]
+        
+        # Calculate entailment
+        entailment_sum = sum(cr.entailment_score for cr in verified_results)
+        verified_count = len(verified_claims)
+        raw_count = len(raw_claims)
+        
+        avg_entailment = entailment_sum / verified_count if verified_count > 0 else 0.0
+        completeness = verified_count / raw_count if raw_count > 0 else 0.0
         
         # Count unique sources
         unique_sources_raw = self._count_unique_sources(raw_claims)
@@ -196,9 +235,12 @@ class MetricsCollector:
         
         # Quality metrics
         quality = QualityMetrics(
-            total_claims_extracted=len(raw_claims),
-            verified_claims_count=len(verified_claims),
-            claims_per_source=len(verified_claims) / unique_sources_verified if unique_sources_verified > 0 else 0.0,
+            total_claims_extracted=raw_count,
+            raw_claims_extracted=raw_count,
+            verified_claims_count=verified_count,
+            completeness=completeness,
+            entailment_score=avg_entailment,
+            claims_per_source=verified_count / unique_sources_verified if unique_sources_verified > 0 else 0.0,
             unique_source_urls=unique_sources_verified,
         )
         
@@ -264,12 +306,21 @@ class ComparisonResult:
     hdrp_metrics: SystemMetrics
     react_metrics: SystemMetrics
     
+    @property
+    def precision(self) -> float:
+        """Calculate Precision: HDRP verified claims / ReAct raw claims."""
+        react_raw = self.react_metrics.quality.raw_claims_extracted
+        if react_raw == 0:
+            return 0.0
+        return self.hdrp_metrics.quality.verified_claims_count / react_raw
+
     def to_dict(self) -> Dict:
         return {
             "query": self.query,
             "query_id": self.query_id,
             "hdrp": self.hdrp_metrics.to_dict(),
             "react": self.react_metrics.to_dict(),
+            "precision": round(self.precision, 3),
         }
     
     def get_winner(self, metric_category: str, metric_name: str) -> str:
@@ -338,6 +389,8 @@ class AggregateComparison:
         key_metrics = [
             ("quality", "verified_claims_count"),
             ("quality", "unique_source_urls"),
+            ("quality", "completeness"),
+            ("quality", "entailment_score"),
             ("trajectory", "relevant_claims_ratio"),
             ("trajectory", "search_efficiency"),
             ("hallucination", "hallucination_risk_score"),
@@ -367,16 +420,21 @@ class AggregateComparison:
         
         hdrp_totals = self._initialize_totals()
         react_totals = self._initialize_totals()
+        total_precision = 0.0
         
         for result in self.comparison_results:
             self._add_to_totals(hdrp_totals, result.hdrp_metrics)
             self._add_to_totals(react_totals, result.react_metrics)
+            total_precision += result.precision
         
         n = len(self.comparison_results)
-        return {
+        avgs = {
             "hdrp": self._compute_averages(hdrp_totals, n),
             "react": self._compute_averages(react_totals, n),
         }
+        # Inject comparative average precision into HDRP stats (or separate)
+        avgs["hdrp"]["avg_comparative_precision"] = round(total_precision / n, 3)
+        return avgs
     
     def _initialize_totals(self) -> Dict:
         """Initialize totals dictionary for averaging."""
@@ -389,6 +447,8 @@ class AggregateComparison:
             "relevant_ratio": 0.0,
             "search_efficiency": 0.0,
             "hallucination_risk": 0.0,
+            "completeness": 0.0,
+            "entailment_score": 0.0,
         }
     
     def _add_to_totals(self, totals: Dict, metrics: SystemMetrics) -> None:
@@ -401,6 +461,8 @@ class AggregateComparison:
         totals["relevant_ratio"] += metrics.trajectory.relevant_claims_ratio
         totals["search_efficiency"] += metrics.trajectory.search_efficiency
         totals["hallucination_risk"] += metrics.hallucination.hallucination_risk_score
+        totals["completeness"] += metrics.quality.completeness
+        totals["entailment_score"] += metrics.quality.entailment_score
     
     def _compute_averages(self, totals: Dict, n: int) -> Dict:
         """Compute averages from totals."""
@@ -413,5 +475,7 @@ class AggregateComparison:
             "avg_relevant_ratio": round(totals["relevant_ratio"] / n, 3),
             "avg_search_efficiency": round(totals["search_efficiency"] / n, 3),
             "avg_hallucination_risk": round(totals["hallucination_risk"] / n, 3),
+            "avg_completeness": round(totals["completeness"] / n, 3),
+            "avg_entailment_score": round(totals["entailment_score"] / n, 3),
         }
 

@@ -24,6 +24,7 @@ class CritiqueResult(BaseModel):
     claim: AtomicClaim
     is_valid: bool
     reason: str
+    entailment_score: float = 0.0
 
 class ExtractionResponse(BaseModel):
     """Container for claims extracted from a specific source text."""
