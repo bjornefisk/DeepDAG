@@ -59,8 +59,56 @@ HDRP/
 ├── services/           # Python: AI Agents (Principal, Researcher, Critic)
 ├── api/proto/          # gRPC Service Definitions
 ├── tools/eval/         # Benchmarking suite
+├── tools/search/       # Search providers (simulated, Tavily, etc.)
+├── artifacts/          # Generated research artifacts (reports + DAGs)
+├── cli.py              # Python CLI entry point
 └── logs/               # Structured execution traces
 ```
+
+## CLI Usage
+
+### Installation
+
+- **Create and activate a virtual environment** (recommended), then install Python dependencies:
+
+```bash
+cd DeepDAG
+python -m venv .venv
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+pip install -r requirements.txt
+pip install -r HDRP/services/requirements.txt
+```
+
+### Running the HDRP CLI
+
+- **Basic research query using Tavily** (real web search, requires API key):
+
+```bash
+export TAVILY_API_KEY="your-tavily-api-key"
+python -m HDRP.cli --query "Latest developments in quantum computing"
+```
+
+- **Use the simulated provider** (no external calls, deterministic):
+
+```bash
+python -m HDRP.cli --query "Test query" --provider simulated
+```
+
+- **Write the report to a file**:
+
+```bash
+python -m HDRP.cli \
+  --query "AI research trends in 2025" \
+  --provider tavily \
+  --output hdrp_report.md
+```
+
+The CLI runs the full Python pipeline:
+
+- **Search** via `HDRP.tools.search` (Tavily or simulated)
+- **Research** using `ResearcherService` (extracts atomic claims with traceability)
+- **Critic** using `CriticService` (verifies and filters claims)
+- **Synthesis** using `SynthesizerService` (generates a markdown report with citations)
 
 ## License
 

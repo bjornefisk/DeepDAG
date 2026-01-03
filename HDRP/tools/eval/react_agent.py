@@ -77,6 +77,7 @@ class ReActAgent:
         )
 
         # Step 2: call the search tool
+        provider_name = type(self.search_provider).__name__
         try:
             search_response = self.search_provider.search(
                 question, max_results=self.max_results
@@ -86,7 +87,12 @@ class ReActAgent:
             steps.append(step_1)
             self.logger.log(
                 "react_search_error",
-                {"error": str(e), "question": question},
+                {
+                    "error": str(e),
+                    "question": question,
+                    "provider": provider_name,
+                    "max_results_requested": self.max_results,
+                },
             )
             # In failure mode, return an empty result with the error surfaced.
             return ReActRunResult(
@@ -101,7 +107,13 @@ class ReActAgent:
             steps.append(step_1)
             self.logger.log(
                 "react_search_empty",
-                {"question": question},
+                {
+                    "question": question,
+                    "provider": provider_name,
+                    "max_results_requested": self.max_results,
+                    "latency_ms": search_response.latency_ms,
+                    "total_found": search_response.total_found,
+                },
             )
             return ReActRunResult(
                 question=question,
@@ -123,6 +135,11 @@ class ReActAgent:
             "react_search_observation",
             {
                 "question": question,
+                "provider": provider_name,
+                "max_results_requested": self.max_results,
+                "latency_ms": search_response.latency_ms,
+                "results_count": len(search_response.results),
+                "total_found": search_response.total_found,
                 "results": [
                     {
                         "index": idx + 1,

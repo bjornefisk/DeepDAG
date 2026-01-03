@@ -1,5 +1,13 @@
+import json
 import unittest
-from HDRP.tools.search import SearchFactory, SearchResult, SearchError
+from unittest.mock import MagicMock, patch
+
+from HDRP.tools.search import (
+    SearchFactory,
+    SearchResult,
+    SearchError,
+    TavilySearchProvider,
+)
 
 class TestSearchTool(unittest.TestCase):
     
@@ -60,6 +68,94 @@ class TestSearchTool(unittest.TestCase):
     def test_factory_unimplemented_provider(self):
         with self.assertRaises(NotImplementedError):
             SearchFactory.get_provider("google")
+
+
+class TestTavilyProvider(unittest.TestCase):
+    def _mock_urlopen(self, payload, status: int = 200):
+        mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_resp.getcode.return_value = status
+        mock_resp.read.return_value = json.dumps(payload).encode("utf-8")
+        return mock_resp
+
+    @patch("HDRP.tools.search.tavily.request.urlopen")
+    def test_tavily_basic_mapping(self, mock_urlopen):
+        payload = {
+            "results": [
+                {
+                    "title": "Example title",
+                    "url": "https://example.com",
+                    "content": "Example content.",
+                    "score": 0.99,
+                    "published_date": "2024-01-01",
+                }
+            ],
+            "response_time": 1.23,
+        }
+        mock_urlopen.return_value = self._mock_urlopen(payload)
+
+        provider = TavilySearchProvider(api_key="test-key")
+        response = provider.search("test query", max_results=3)
+
+        self.assertEqual(response.query, "test query")
+        self.assertEqual(len(response.results), 1)
+
+        result = response.results[0]
+        self.assertEqual(result.title, "Example title")
+        self.assertEqual(result.url, "https://example.com")
+        self.assertEqual(result.snippet, "Example content.")
+        self.assertEqual(result.source, "tavily")
+        self.assertEqual(response.total_found, 1)
+        self.assertIn("score", result.metadata)
+
+    @patch("HDRP.tools.search.tavily.request.urlopen")
+    def test_tavily_handles_empty_results(self, mock_urlopen):
+        payload = {"results": []}
+        mock_urlopen.return_value = self._mock_urlopen(payload)
+
+        provider = TavilySearchProvider(api_key="test-key")
+        response = provider.search("no results", max_results=5)
+
+        self.assertEqual(response.total_found, 0)
+        self.assertEqual(len(response.results), 0)
+
+    @patch("HDRP.tools.search.tavily.request.urlopen")
+    def test_tavily_tolerates_partial_items(self, mock_urlopen):
+        payload = {
+            "results": [
+                {
+                    # Title intentionally omitted to exercise defaulting logic.
+                    "url": "https://example.com/partial",
+                    "content": "Partial content.",
+                }
+            ]
+        }
+        mock_urlopen.return_value = self._mock_urlopen(payload)
+
+        provider = TavilySearchProvider(api_key="test-key")
+        response = provider.search("partial data", max_results=3)
+
+        self.assertEqual(len(response.results), 1)
+        result = response.results[0]
+        self.assertEqual(result.title, "Untitled result")
+        self.assertEqual(result.url, "https://example.com/partial")
+        self.assertEqual(result.snippet, "Partial content.")
+
+    @patch("HDRP.tools.search.tavily.request.urlopen")
+    def test_tavily_http_error_raises_search_error(self, mock_urlopen):
+        from urllib import error as urlerror
+
+        mock_urlopen.side_effect = urlerror.HTTPError(
+            url="https://api.tavily.com/search",
+            code=500,
+            msg="Server error",
+            hdrs=None,
+            fp=None,
+        )
+
+        provider = TavilySearchProvider(api_key="test-key")
+        with self.assertRaises(SearchError):
+            provider.search("trigger error")
 
 if __name__ == '__main__':
     unittest.main()

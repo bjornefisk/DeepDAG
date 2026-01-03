@@ -1,20 +1,26 @@
 import abc
-import time
-from typing import List, Optional
+from typing import List
 
-from .schema import SearchResponse, SearchResult
+from .schema import SearchResponse
+
 
 class SearchProvider(abc.ABC):
     """Abstract Base Class for Search Providers.
     
-    Enforces a consistent interface regardless of the underlying API (Google, Bing, Serper, etc.).
+    Enforces a consistent interface regardless of the underlying API (Google, Bing, Serper, Tavily, etc.).
+    
+    Providers are expected to respect:
+    - HARD_LIMIT_SOURCES: global hard cap on returned sources to avoid context flooding / excessive cost.
+    - DEFAULT_MAX_RESULTS: conventional per-query default used by callers such as the ReActAgent.
     """
     
-    # Safety cap to prevent context window flooding or excessive API costs
+    # Safety cap to prevent context window flooding or excessive API costs.
     HARD_LIMIT_SOURCES = 10
+    # Conventional default when callers do not specify max_results explicitly.
+    DEFAULT_MAX_RESULTS = 5
 
     @abc.abstractmethod
-    def search(self, query: str, max_results: int = 5) -> SearchResponse:
+    def search(self, query: str, max_results: int = DEFAULT_MAX_RESULTS) -> SearchResponse:
         """Execute a search query and return normalized results.
         
         Args:
