@@ -2,30 +2,28 @@
 """
 HDRP CLI
 
-Lightweight command-line interface for running the HDRP research pipeline
-end-to-end using the Python services and pluggable search providers
-(Tavily or simulated).
-
-Usage examples:
-
-    # With Tavily (requires TAVILY_API_KEY)
-    export TAVILY_API_KEY="your-key-here"
-    python -m HDRP.cli --query "Latest developments in quantum computing"
-
-    # With simulated provider (no external calls)
-    python -m HDRP.cli --query "Test query" --provider simulated
+Typer/Rich-powered command-line interface for running the HDRP research
+pipeline end-to-end using the Python services and pluggable search
+providers (Tavily or simulated).
 """
 
-import argparse
 import os
 import sys
 from typing import Optional
+
+import typer
+from rich.console import Console
+from rich.panel import Panel
 
 from HDRP.tools.search.factory import SearchFactory
 from HDRP.services.researcher.service import ResearcherService
 from HDRP.services.critic.service import CriticService
 from HDRP.services.synthesizer.service import SynthesizerService
 from HDRP.services.shared.logger import ResearchLogger
+
+
+app = typer.Typer(help="HDRP research CLI")
+console = Console()
 
 
 def _build_search_provider(
@@ -70,8 +68,8 @@ def _run_pipeline(
     run_id = run_logger.run_id
 
     if verbose:
-        print(f"[hdrp-cli] run_id={run_id}")
-        print(f"[hdrp-cli] provider={provider or 'auto'}")
+        console.print(f"[bold cyan][hdrp][/bold cyan] run_id={run_id}")
+        console.print(f"[bold cyan][hdrp][/bold cyan] provider={provider or 'auto'}")
 
     # 1. Build search provider (Tavily or simulated).
     try:
@@ -80,7 +78,9 @@ def _run_pipeline(
         # Re-raise to allow clean exit with message
         raise
     except Exception as exc:
-        print(f"[hdrp-cli] Failed to initialize search provider: {exc}", file=sys.stderr)
+        console.print(
+            f"[bold red][hdrp][/bold red] Failed to initialize search provider: {exc}"
+        )
         return 1
 
     # 2. Initialize services.
@@ -89,20 +89,20 @@ def _run_pipeline(
     synthesizer = SynthesizerService()
 
     if verbose:
-        print(f"[hdrp-cli] Researching: {query!r}")
+        console.print(f"[bold cyan][hdrp][/bold cyan] Researching: [italic]{query}[/italic]")
 
     # 3. Research.
     try:
         claims = researcher.research(query, source_node_id="root_research")
     except Exception as exc:
-        print(f"[hdrp-cli] Research failed: {exc}", file=sys.stderr)
+        console.print(f"[bold red][hdrp][/bold red] Research failed: {exc}")
         return 1
 
     if verbose:
-        print(f"[hdrp-cli] Retrieved {len(claims)} raw claims")
+        console.print(f"[bold cyan][hdrp][/bold cyan] Retrieved {len(claims)} raw claims")
 
     if not claims:
-        print("No information found for this query.")
+        console.print("[yellow]No information found for this query.[/yellow]")
         return 0
 
     # 4. Critic: verify claims.
@@ -111,7 +111,10 @@ def _run_pipeline(
 
     if verbose:
         rejected_count = len(critique_results) - verified_count
-        print(f"[hdrp-cli] Verified={verified_count}, Rejected={rejected_count}")
+        console.print(
+            f"[bold cyan][hdrp][/bold cyan] Verified={verified_count}, "
+            f"Rejected={rejected_count}"
+        )
 
     # 5. Synthesize human-readable report.
     context = {
@@ -128,69 +131,87 @@ def _run_pipeline(
             with open(output_path, "w", encoding="utf-8") as f:
                 f.write(report)
             if verbose:
-                print(f"[hdrp-cli] Report written to {output_path}")
+                console.print(
+                    Panel.fit(
+                        f"Report written to [bold]{output_path}[/bold]",
+                        border_style="green",
+                    )
+                )
         except OSError as exc:
-            print(f"[hdrp-cli] Failed to write report to {output_path}: {exc}", file=sys.stderr)
+            console.print(
+                f"[bold red][hdrp][/bold red] Failed to write report to {output_path}: {exc}"
+            )
             return 1
     else:
-        # Print to stdout.
-        print(report)
+        # Print to stdout as plain text (no Rich markup parsing).
+        console.print(report, markup=False)
 
     return 0
 
 
-def main(argv: Optional[list] = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="hdrp-cli",
-        description="Run the HDRP research pipeline on a single query.",
-    )
-    parser.add_argument(
+@app.command()
+def run(
+    query: str = typer.Option(
+        ...,
         "--query",
         "-q",
-        required=True,
         help="Research query or objective to investigate.",
-    )
-    parser.add_argument(
+    ),
+    provider: Optional[str] = typer.Option(
+        None,
         "--provider",
         "-p",
-        choices=["tavily", "simulated"],
-        default=None,
-        help="Search provider to use. "
-        "If omitted, HDRP_SEARCH_PROVIDER/TAVILY_* env vars are used.",
-    )
-    parser.add_argument(
+        help=(
+            "Search provider to use ('tavily' or 'simulated'). "
+            "If omitted, HDRP_SEARCH_PROVIDER/TAVILY_* env vars are used."
+        ),
+    ),
+    api_key: Optional[str] = typer.Option(
+        None,
         "--api-key",
-        dest="api_key",
-        default=None,
-        help="Explicit API key for Tavily; overrides TAVILY_API_KEY env var "
-        "when --provider=tavily.",
-    )
-    parser.add_argument(
+        help="Explicit API key for Tavily; overrides TAVILY_API_KEY when set.",
+    ),
+    output: Optional[str] = typer.Option(
+        None,
         "--output",
         "-o",
-        dest="output_path",
-        default=None,
         help="If provided, write the final report to this file instead of stdout.",
-    )
-    parser.add_argument(
+    ),
+    verbose: bool = typer.Option(
+        False,
         "--verbose",
         "-v",
-        action="store_true",
-        help="Enable verbose logging to stdout.",
+        help="Enable verbose logging to the terminal.",
+    ),
+) -> None:
+    """Run a single HDRP research query."""
+    provider_display = provider or "auto"
+    console.print(
+        Panel.fit(
+            f"[bold cyan]HDRP Research[/bold cyan]\n\n"
+            f"[bold]Query:[/bold] {query}\n"
+            f"[bold]Provider:[/bold] {provider_display}",
+            border_style="cyan",
+        )
     )
 
-    args = parser.parse_args(argv)
-
-    return _run_pipeline(
-        query=args.query,
-        provider=args.provider,
-        api_key=args.api_key,
-        output_path=args.output_path,
-        verbose=args.verbose,
+    exit_code = _run_pipeline(
+        query=query,
+        provider=provider or "",
+        api_key=api_key,
+        output_path=output,
+        verbose=verbose,
     )
+
+    raise typer.Exit(code=exit_code)
+
+
+def main() -> None:
+    """Entrypoint used by `python -m HDRP.cli` or a console_script."""
+    app()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
 
 

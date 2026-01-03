@@ -85,22 +85,29 @@ pip install -r HDRP/services/requirements.txt
 
 ```bash
 export TAVILY_API_KEY="your-tavily-api-key"
-python -m HDRP.cli --query "Latest developments in quantum computing"
+python -m HDRP.cli run --query "Latest developments in quantum computing" --provider tavily
 ```
 
 - **Use the simulated provider** (no external calls, deterministic):
 
 ```bash
-python -m HDRP.cli --query "Test query" --provider simulated
+python -m HDRP.cli run --query "Test query" --provider simulated
 ```
 
 - **Write the report to a file**:
 
 ```bash
 python -m HDRP.cli \
+  run \
   --query "AI research trends in 2025" \
   --provider tavily \
   --output hdrp_report.md
+```
+
+If you later add a `hdrp` entry point via `pyproject.toml`, you will be able to run:
+
+```bash
+hdrp run --query "Latest developments in quantum computing" --provider tavily
 ```
 
 The CLI runs the full Python pipeline:
