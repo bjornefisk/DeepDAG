@@ -5,6 +5,7 @@ from .simulated import SimulatedSearchProvider
 from .tavily import TavilySearchProvider
 from .google import GoogleSearchProvider
 from .bing import BingSearchProvider
+from .multi import MultiSearchProvider
 
 __all__ = [
     "SearchResult", 
@@ -16,4 +17,5 @@ __all__ = [
     "TavilySearchProvider",
     "GoogleSearchProvider",
     "BingSearchProvider",
+    "MultiSearchProvider",
 ]
