@@ -6,6 +6,7 @@ from urllib import error, request
 
 from .base import SearchProvider, SearchError
 from .schema import SearchResponse, SearchResult
+from .api_key_validator import validate_tavily_api_key, APIKeyError
 
 
 # Default Tavily HTTP endpoint; can be overridden for testing.
@@ -35,6 +36,7 @@ class TavilySearchProvider(SearchProvider):
         topic: str = "general",
         timeout_seconds: float = 8.0,
         default_max_results: Optional[int] = None,
+        validate_key: bool = True,
     ) -> None:
         self.api_key = api_key or os.getenv("TAVILY_API_KEY")
         self.search_depth = search_depth
@@ -46,14 +48,22 @@ class TavilySearchProvider(SearchProvider):
             if default_max_results is not None
             else self.DEFAULT_MAX_RESULTS
         )
+        
+        # Validate API key early if requested (default behavior)
+        # This can be disabled for testing or when using health_check() separately
+        if validate_key:
+            try:
+                validate_tavily_api_key(self.api_key, raise_on_invalid=True)
+            except APIKeyError as e:
+                raise SearchError(str(e)) from e
 
     def health_check(self) -> bool:
         """Return True if the provider appears to be correctly configured.
 
-        For now we only validate local configuration (e.g., API key presence)
-        to avoid introducing external dependencies into health checks.
+        Validates both API key presence and format.
         """
-        return bool(self.api_key)
+        is_valid, _ = validate_tavily_api_key(self.api_key, raise_on_invalid=False)
+        return is_valid
 
     def search(self, query: str, max_results: int = None) -> SearchResponse:
         if max_results is None:
@@ -61,11 +71,11 @@ class TavilySearchProvider(SearchProvider):
 
         safe_limit = self._validate_limit(max_results)
 
-        if not self.api_key:
-            raise SearchError(
-                "TavilySearchProvider is misconfigured: missing API key. "
-                "Set TAVILY_API_KEY or pass api_key explicitly."
-            )
+        # Double-check API key validity (in case validate_key=False was used)
+        try:
+            validate_tavily_api_key(self.api_key, raise_on_invalid=True)
+        except APIKeyError as e:
+            raise SearchError(str(e)) from e
 
         payload: Dict[str, Any] = {
             # API key is passed in the JSON body per Tavily's public HTTP interface.

@@ -16,6 +16,8 @@ from rich.console import Console
 from rich.panel import Panel
 
 from HDRP.tools.search.factory import SearchFactory
+from HDRP.tools.search.base import SearchError
+from HDRP.tools.search.api_key_validator import APIKeyError
 from HDRP.services.researcher.service import ResearcherService
 from HDRP.services.critic.service import CriticService
 from HDRP.services.synthesizer.service import SynthesizerService
@@ -77,6 +79,14 @@ def _run_pipeline(
     except SystemExit:
         # Re-raise to allow clean exit with message
         raise
+    except (SearchError, APIKeyError) as exc:
+        # API key validation errors get special formatting
+        console.print(Panel.fit(
+            f"[bold red]Configuration Error[/bold red]\n\n{exc}",
+            border_style="red",
+            title="[bold]HDRP Setup Required[/bold]",
+        ))
+        return 1
     except Exception as exc:
         console.print(
             f"[bold red][hdrp][/bold red] Failed to initialize search provider: {exc}"

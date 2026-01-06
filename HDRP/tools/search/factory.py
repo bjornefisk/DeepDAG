@@ -1,8 +1,9 @@
 import os
 from typing import Any, Optional
 
-from .base import SearchProvider
+from .base import SearchProvider, SearchError
 from .simulated import SimulatedSearchProvider
+from .api_key_validator import APIKeyError
 
 
 class SearchFactory:
@@ -36,7 +37,10 @@ class SearchFactory:
             raise ValueError(f"Unknown provider type: {provider_type}")
 
     @staticmethod
-    def from_env(default_provider: str = "simulated") -> SearchProvider:
+    def from_env(
+        default_provider: str = "simulated",
+        strict_mode: bool = False,
+    ) -> SearchProvider:
         """Create a provider based on environment variables.
 
         Environment variables:
@@ -46,6 +50,11 @@ class SearchFactory:
             TAVILY_TOPIC: optional topic bias (\"general\", \"news\", ...).
             TAVILY_MAX_RESULTS: default max results per query (int).
             TAVILY_TIMEOUT_SECONDS: HTTP timeout for Tavily requests (float seconds).
+        
+        Args:
+            default_provider: Provider to use if HDRP_SEARCH_PROVIDER is not set.
+            strict_mode: If True, raise errors on misconfiguration instead of
+                        falling back to simulated provider.
         """
         provider_type = os.getenv("HDRP_SEARCH_PROVIDER", default_provider).lower()
 
@@ -70,33 +79,51 @@ class SearchFactory:
             except ValueError:
                 default_max_results = None
 
-            provider = SearchFactory.get_provider(
-                "tavily",
-                api_key=api_key,
-                search_depth=search_depth,
-                topic=topic,
-                timeout_seconds=timeout_seconds,
-                default_max_results=default_max_results,
-            )
-
-            # If Tavily is misconfigured (e.g., missing key) or fails a
-            # lightweight health check, fall back to the deterministic
-            # simulated provider to keep evaluation flows robust.
             try:
+                provider = SearchFactory.get_provider(
+                    "tavily",
+                    api_key=api_key,
+                    search_depth=search_depth,
+                    topic=topic,
+                    timeout_seconds=timeout_seconds,
+                    default_max_results=default_max_results,
+                )
+                
+                # Verify health check passes
                 if not provider.health_check():
+                    if strict_mode:
+                        raise SearchError(
+                            "Tavily provider failed health check. "
+                            "Please verify your API key configuration."
+                        )
                     print(
                         "[search.factory] Tavily is misconfigured; "
                         "falling back to simulated provider."
                     )
                     return SearchFactory.get_provider("simulated")
-            except Exception:
+                    
+                return provider
+                
+            except (SearchError, APIKeyError) as e:
+                if strict_mode:
+                    raise SearchError(
+                        f"Failed to initialize Tavily provider: {e}"
+                    ) from e
+                print(
+                    f"[search.factory] Tavily initialization failed: {e}\n"
+                    "[search.factory] Falling back to simulated provider."
+                )
+                return SearchFactory.get_provider("simulated")
+            except Exception as e:
+                if strict_mode:
+                    raise SearchError(
+                        f"Unexpected error initializing Tavily provider: {e}"
+                    ) from e
                 print(
                     "[search.factory] Tavily health check failed; "
                     "falling back to simulated provider."
                 )
                 return SearchFactory.get_provider("simulated")
-
-            return provider
 
         # Default: purely local, deterministic provider.
         return SearchFactory.get_provider("simulated")

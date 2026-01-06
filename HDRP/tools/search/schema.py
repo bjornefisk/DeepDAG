@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, HttpUrl
-from datetime import datetime
+from datetime import datetime, timezone
 
 class SearchResult(BaseModel):
     """Normalized data model for a single search result."""
@@ -17,4 +17,4 @@ class SearchResponse(BaseModel):
     results: List[SearchResult]
     total_found: int = 0
     latency_ms: float = 0.0
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
