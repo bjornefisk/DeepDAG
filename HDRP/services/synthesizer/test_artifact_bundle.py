@@ -10,7 +10,7 @@ import json
 import os
 import shutil
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 from HDRP.services.synthesizer.service import SynthesizerService
 from HDRP.services.synthesizer.humanizer import ReportHumanizer
@@ -36,7 +36,7 @@ class TestArtifactBundle(unittest.TestCase):
                 source_title="Nature: Quantum Computing Basics",
                 source_rank=1,
                 source_node_id="node_quantum_intro",
-                extracted_at=datetime.utcnow().isoformat() + "Z",
+                extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 confidence=0.9
             ),
             AtomicClaim(
@@ -47,7 +47,7 @@ class TestArtifactBundle(unittest.TestCase):
                 source_title="Science: Quantum Supremacy Achieved",
                 source_rank=2,
                 source_node_id="node_quantum_milestones",
-                extracted_at=datetime.utcnow().isoformat() + "Z",
+                extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 confidence=0.85
             ),
             AtomicClaim(
@@ -58,7 +58,7 @@ class TestArtifactBundle(unittest.TestCase):
                 source_title="Nature: Quantum Computing Basics",
                 source_rank=1,
                 source_node_id="node_quantum_challenges",
-                extracted_at=datetime.utcnow().isoformat() + "Z",
+                extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 confidence=0.88
             )
         ]

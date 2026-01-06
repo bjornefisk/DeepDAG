@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional
 from HDRP.services.shared.claims import AtomicClaim, CritiqueResult
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -53,7 +53,7 @@ class SynthesizerService:
             report += f"- **Research Period**: {earliest} to {latest}\n"
         unique_sources_count = len(set(c.source_url for c in verified_claims if c.source_url))
         report += f"- **Unique Sources**: {unique_sources_count}\n"
-        report += f"- **Generated**: {datetime.utcnow().isoformat()}Z\n\n"
+        report += f"- **Generated**: {datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')}\n\n"
         
         if introduction:
             report += f"{introduction}\n\n"
@@ -170,7 +170,7 @@ class SynthesizerService:
         
         # Generate run-specific directory
         if run_id is None:
-            run_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         
         artifact_dir = Path(output_dir) / run_id
         artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -315,7 +315,7 @@ class SynthesizerService:
         metadata = {
             'bundle_info': {
                 'run_id': run_id,
-                'generated_at': datetime.utcnow().isoformat() + 'Z',
+                'generated_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
                 'query': query,
                 'report_title': context.get('report_title', 'Research Report')
             },

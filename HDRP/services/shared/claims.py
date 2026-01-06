@@ -1,6 +1,6 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 class AtomicClaim(BaseModel):
@@ -58,7 +58,7 @@ class ClaimExtractor:
             return ExtractionResponse(source_text=text, claims=[])
 
         # Generate timestamp once for all claims in this extraction
-        extraction_time = datetime.utcnow().isoformat() + "Z"
+        extraction_time = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
         # MVP Heuristic: Split by sentences and filter for 'fact-like' statements.
         sentences = self._split_sentences(text)

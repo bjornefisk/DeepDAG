@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 from HDRP.services.shared.claims import ClaimExtractor, AtomicClaim, CritiqueResult
 from HDRP.services.researcher.service import ResearcherService
 from HDRP.services.critic.service import CriticService
@@ -135,7 +135,7 @@ class TestClaimTraceability(unittest.TestCase):
             support_text="Water boils at 100 degrees Celsius at sea level.",
             source_url="https://example.com/chemistry",
             confidence=0.6,
-            extracted_at=datetime.utcnow().isoformat() + "Z"
+            extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         )
         
         results = self.critic.verify([valid_claim], task="water boiling chemistry")
@@ -155,7 +155,7 @@ class TestClaimTraceability(unittest.TestCase):
             source_title="Quantum Mechanics Review",
             source_rank=1,
             confidence=0.9,
-            extracted_at=datetime.utcnow().isoformat() + "Z"
+            extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         )
         
         result = CritiqueResult(claim=claim, is_valid=True, reason="Verified")
@@ -175,7 +175,7 @@ class TestClaimTraceability(unittest.TestCase):
             source_title="Machine Learning Fundamentals",
             source_rank=2,
             confidence=0.85,
-            extracted_at=datetime.utcnow().isoformat() + "Z"
+            extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         )
         
         result = CritiqueResult(claim=claim, is_valid=True, reason="Verified")
@@ -196,7 +196,7 @@ class TestClaimTraceability(unittest.TestCase):
             source_title="Neural Network Basics",
             source_rank=3,
             confidence=0.9,
-            extracted_at=datetime.utcnow().isoformat() + "Z"
+            extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         )
         
         result = CritiqueResult(claim=claim, is_valid=True, reason="Verified")
@@ -252,7 +252,7 @@ class TestClaimTraceability(unittest.TestCase):
             support_text="This is a minimal but valid claim with timestamp.",
             source_url="https://example.com/minimal",
             confidence=0.7,
-            extracted_at=datetime.utcnow().isoformat() + "Z"
+            extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             # source_title and source_rank are omitted
         )
         
