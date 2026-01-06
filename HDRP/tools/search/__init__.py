@@ -4,7 +4,6 @@ from .factory import SearchFactory
 from .simulated import SimulatedSearchProvider
 from .tavily import TavilySearchProvider
 from .google import GoogleSearchProvider
-from .bing import BingSearchProvider
 from .multi import MultiSearchProvider
 
 __all__ = [
@@ -16,6 +15,5 @@ __all__ = [
     "SimulatedSearchProvider",
     "TavilySearchProvider",
     "GoogleSearchProvider",
-    "BingSearchProvider",
     "MultiSearchProvider",
 ]

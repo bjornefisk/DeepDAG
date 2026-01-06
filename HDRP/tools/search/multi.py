@@ -16,7 +16,6 @@ class MultiSearchProvider(SearchProvider):
         providers = [
             TavilySearchProvider(api_key="..."),
             GoogleSearchProvider(api_key="...", cx="..."),
-            BingSearchProvider(api_key="..."),
         ]
         multi = MultiSearchProvider(providers=providers)
         response = multi.search("quantum computing", max_results=10)

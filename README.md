@@ -79,7 +79,6 @@ python -m HDRP.cli run --query "Latest developments in quantum computing" --prov
 python -m HDRP.cli run --query "Test query" --provider simulated
 ```
 
-Other providers: `tavily`, `google`, `bing` (see Search Provider Configuration below)
 
 - **Write the report to a file**:
 
@@ -113,7 +112,6 @@ HDRP supports multiple search providers for web research. Choose based on your n
 | **Simulated** | No | Free | Testing, offline development |
 | **Tavily** | Yes | Free tier available | Production research, balanced cost/quality |
 | **Google** | Yes (+ CX) | 100 free/day, then paid | High-quality results, custom search scopes |
-| **Bing** | Yes | Paid | Enterprise integration, Azure ecosystem |
 
 ### Simulated Provider (Default)
 
@@ -158,11 +156,7 @@ python -m HDRP.cli run --query "Test query" --provider simulated
    python -m HDRP.cli run --query "Latest AI research" --provider google
    ```
 
-### Bing Web Search
 
-1. **Create Bing Search Resource:**
-   - Visit [Azure Portal](https://portal.azure.com/#create/Microsoft.CognitiveServicesBingSearch-v7)
-   - Create a Bing Search resource
    - Select pricing tier
 
 2. **Get API Key:**
@@ -171,12 +165,9 @@ python -m HDRP.cli run --query "Test query" --provider simulated
 
 3. **Set environment variable:**
    ```bash
-   export BING_API_KEY="your-subscription-key"
    ```
 
-4. **Run with Bing:**
    ```bash
-   python -m HDRP.cli run --query "Latest AI research" --provider bing
    ```
 
 ### Environment-Based Provider Selection
