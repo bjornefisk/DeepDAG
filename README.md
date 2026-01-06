@@ -44,7 +44,6 @@ HDRP/
 ├── services/           # Python: AI Agents (Principal, Researcher, Critic)
 ├── api/proto/          # gRPC Service Definitions
 ├── tools/eval/         # Benchmarking suite
-├── tools/search/       # Search providers (simulated, Tavily, etc.)
 ├── artifacts/          # Generated research artifacts (reports + DAGs)
 ├── cli.py              # Python CLI entry point
 └── logs/               # Structured execution traces
@@ -66,11 +65,8 @@ pip install -r HDRP/services/requirements.txt
 
 ### Running the HDRP CLI
 
-- **Basic research query using Tavily** (real web search, requires API key):
 
 ```bash
-export TAVILY_API_KEY="your-tavily-api-key"
-python -m HDRP.cli run --query "Latest developments in quantum computing" --provider tavily
 ```
 
 - **Use the simulated provider** (no external calls, deterministic, one of four available providers):
@@ -86,19 +82,16 @@ python -m HDRP.cli run --query "Test query" --provider simulated
 python -m HDRP.cli \
   run \
   --query "AI research trends in 2025" \
-  --provider tavily \
   --output hdrp_report.md
 ```
 
 If you later add a `hdrp` entry point via `pyproject.toml`, you will be able to run:
 
 ```bash
-hdrp run --query "Latest developments in quantum computing" --provider tavily
 ```
 
 The CLI runs the full Python pipeline:
 
-- **Search** via `HDRP.tools.search` (Tavily or simulated)
 - **Research** using `ResearcherService` (extracts atomic claims with traceability)
 - **Critic** using `CriticService` (verifies and filters claims)
 - **Synthesis** using `SynthesizerService` (generates a markdown report with citations)
@@ -110,7 +103,6 @@ HDRP supports multiple search providers for web research. Choose based on your n
 | Provider | API Key Required | Cost | Best For |
 |----------|-----------------|------|----------|
 | **Simulated** | No | Free | Testing, offline development |
-| **Tavily** | Yes | Free tier available | Production research, balanced cost/quality |
 | **Google** | Yes (+ CX) | 100 free/day, then paid | High-quality results, custom search scopes |
 
 ### Simulated Provider (Default)
@@ -121,16 +113,11 @@ No setup required. Returns mock data for testing:
 python -m HDRP.cli run --query "Test query" --provider simulated
 ```
 
-### Tavily Search
 
-1. Get an API key from [tavily.com](https://tavily.com)
 2. Set environment variable:
    ```bash
-   export TAVILY_API_KEY="tvly-your-actual-key"
    ```
-3. Run with Tavily:
    ```bash
-   python -m HDRP.cli run --query "Latest AI research" --provider tavily
    ```
 
 ### Google Custom Search
@@ -175,8 +162,6 @@ python -m HDRP.cli run --query "Test query" --provider simulated
 Set `HDRP_SEARCH_PROVIDER` to automatically use a specific provider:
 
 ```bash
-export HDRP_SEARCH_PROVIDER=tavily
-export TAVILY_API_KEY="tvly-your-key"
 python -m HDRP.cli run --query "Your research query"
 ```
 

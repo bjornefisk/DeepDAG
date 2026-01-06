@@ -19,7 +19,7 @@ class SearchFactory:
 
         Args:
             provider_type: Identifier for the provider implementation
-                (e.g. \"simulated\", \"tavily\", \"google\").
+                (e.g. \"simulated\", \"google\").
             api_key: Optional API key for providers that require it.
             provider_kwargs: Provider-specific configuration (e.g. timeouts).
         """
@@ -30,11 +30,6 @@ class SearchFactory:
             from .google import GoogleSearchProvider
 
             return GoogleSearchProvider(api_key=api_key, **provider_kwargs)
-        elif provider_type == "tavily":
-            # Import lazily to avoid unnecessary dependencies when Tavily is unused.
-            from .tavily import TavilySearchProvider
-
-            return TavilySearchProvider(api_key=api_key, **provider_kwargs)
         else:
             raise ValueError(f"Unknown provider type: {provider_type}")
 
@@ -46,14 +41,7 @@ class SearchFactory:
         """Create a provider based on environment variables.
 
         Environment variables:
-            HDRP_SEARCH_PROVIDER: which provider to use (\"simulated\", \"tavily\", \"google\").
-            
-            Tavily:
-                TAVILY_API_KEY: API key for Tavily (required when provider is \"tavily\").
-                TAVILY_SEARCH_DEPTH: optional search depth (\"basic\" / \"advanced\").
-                TAVILY_TOPIC: optional topic bias (\"general\", \"news\", ...).
-                TAVILY_MAX_RESULTS: default max results per query (int).
-                TAVILY_TIMEOUT_SECONDS: HTTP timeout for Tavily requests (float seconds).
+            HDRP_SEARCH_PROVIDER: which provider to use (\"simulated\", \"google\").
             
             Google:
                 GOOGLE_API_KEY: API key for Google Custom Search (required).
@@ -68,74 +56,7 @@ class SearchFactory:
         """
         provider_type = os.getenv("HDRP_SEARCH_PROVIDER", default_provider).lower()
 
-        if provider_type == "tavily":
-            api_key = os.getenv("TAVILY_API_KEY")
-            search_depth = os.getenv("TAVILY_SEARCH_DEPTH", "basic")
-            topic = os.getenv("TAVILY_TOPIC", "general")
-
-            timeout_env = os.getenv("TAVILY_TIMEOUT_SECONDS", "")
-            max_results_env = os.getenv("TAVILY_MAX_RESULTS", "")
-
-            timeout_seconds: Optional[float]
-            default_max_results: Optional[int]
-
-            try:
-                timeout_seconds = float(timeout_env) if timeout_env else 8.0
-            except ValueError:
-                timeout_seconds = 8.0
-
-            try:
-                default_max_results = int(max_results_env) if max_results_env else None
-            except ValueError:
-                default_max_results = None
-
-            try:
-                provider = SearchFactory.get_provider(
-                    "tavily",
-                    api_key=api_key,
-                    search_depth=search_depth,
-                    topic=topic,
-                    timeout_seconds=timeout_seconds,
-                    default_max_results=default_max_results,
-                )
-                
-                # Verify health check passes
-                if not provider.health_check():
-                    if strict_mode:
-                        raise SearchError(
-                            "Tavily provider failed health check. "
-                            "Please verify your API key configuration."
-                        )
-                    print(
-                        "[search.factory] Tavily is misconfigured; "
-                        "falling back to simulated provider."
-                    )
-                    return SearchFactory.get_provider("simulated")
-                    
-                return provider
-                
-            except (SearchError, APIKeyError) as e:
-                if strict_mode:
-                    raise SearchError(
-                        f"Failed to initialize Tavily provider: {e}"
-                    ) from e
-                print(
-                    f"[search.factory] Tavily initialization failed: {e}\n"
-                    "[search.factory] Falling back to simulated provider."
-                )
-                return SearchFactory.get_provider("simulated")
-            except Exception as e:
-                if strict_mode:
-                    raise SearchError(
-                        f"Unexpected error initializing Tavily provider: {e}"
-                    ) from e
-                print(
-                    "[search.factory] Tavily health check failed; "
-                    "falling back to simulated provider."
-                )
-                return SearchFactory.get_provider("simulated")
-
-        elif provider_type == "google":
+        if provider_type == "google":
             api_key = os.getenv("GOOGLE_API_KEY")
             cx = os.getenv("GOOGLE_CX")
             timeout_env = os.getenv("GOOGLE_TIMEOUT_SECONDS", "")
