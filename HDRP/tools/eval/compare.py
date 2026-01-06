@@ -24,7 +24,8 @@ from HDRP.tools.eval.metrics import (
 )
 from HDRP.tools.eval.results_formatter import ResultsFormatter
 from HDRP.tools.search.factory import SearchFactory
-from HDRP.tools.search.base import SearchProvider
+from HDRP.tools.search.base import SearchProvider, SearchError
+from HDRP.tools.search.api_key_validator import APIKeyError
 from HDRP.services.researcher.service import ResearcherService
 from HDRP.services.critic.service import CriticService
 from HDRP.services.shared.logger import ResearchLogger
@@ -254,6 +255,11 @@ Examples:
     # Build search provider
     try:
         search_provider = _build_search_provider(args.provider, args.api_key)
+    except (SearchError, APIKeyError) as e:
+        console.print(f"[bold red]Configuration Error:[/bold red]\n")
+        console.print(str(e))
+        console.print("\n[yellow]Tip:[/yellow] Use --provider simulated for testing without an API key.")
+        return 1
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] Failed to initialize search provider: {e}")
         return 1

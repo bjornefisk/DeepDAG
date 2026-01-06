@@ -1,9 +1,12 @@
 import argparse
 import os
+import sys
 from typing import Optional
 
 from HDRP.tools.eval.react_agent import ReActAgent
 from HDRP.tools.search import SearchFactory, SearchProvider
+from HDRP.tools.search.base import SearchError
+from HDRP.tools.search.api_key_validator import APIKeyError
 
 
 def _build_search_provider(explicit_provider: Optional[str]) -> SearchProvider:
@@ -101,7 +104,16 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    provider = _build_search_provider(args.search_provider)
+    try:
+        provider = _build_search_provider(args.search_provider)
+    except (SearchError, APIKeyError) as e:
+        print(f"\n[ERROR] Failed to initialize search provider:\n", file=sys.stderr)
+        print(str(e), file=sys.stderr)
+        print("\nTip: Use --search-provider simulated for testing without an API key.", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n[ERROR] Unexpected error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     max_results = (
         args.max_results
