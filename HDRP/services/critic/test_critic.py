@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 from HDRP.services.critic.service import CriticService
 from HDRP.services.shared.claims import AtomicClaim
 
@@ -7,7 +7,7 @@ class TestCriticService(unittest.TestCase):
     def setUp(self):
         self.critic = CriticService()
         # Standard timestamp for test claims
-        self.test_timestamp = datetime.utcnow().isoformat() + "Z"
+        self.test_timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     def test_verify_valid_claim(self):
         claim = AtomicClaim(

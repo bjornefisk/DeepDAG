@@ -14,7 +14,15 @@ class CriticService:
         self.logger = ResearchLogger("critic", run_id=run_id)
     
     def verify(self, claims: List[AtomicClaim], task: str) -> List[CritiqueResult]:
-        """Verify claims with balanced precision/recall."""
+        """Verify claims with balanced precision/recall using query decomposition logic.
+        
+        Implements a two-pass verification:
+        1. Direct Relevance: Validates claims directly against the task.
+        2. Bridging (Subtopic) Relevance: Accepts claims that match entities discovered 
+           in the high-confidence claims from pass 1. This solves the "partial relevance"
+           problem for complex queries (e.g. "RSA" details are relevant to "Cryptography"
+           if "RSA" was established as a subtopic).
+        """
         results = []
         
         STOP_WORDS = {
@@ -24,7 +32,12 @@ class CriticService:
         }
 
         task_tokens = set(word.lower() for word in task.split() if word.lower() not in STOP_WORDS)
+        
+        # Intermediate storage for two-pass logic
+        # format: {'claim': claim, 'reason': str|None, 'score': float, 'entities': List[str]}
+        candidates = []
 
+        # PASS 1: Structural & Direct Semantic Checks
         for claim in claims:
             rejection_reason = None
             
@@ -44,54 +57,58 @@ class CriticService:
             lower_statement = claim.statement.lower()
             lower_support = claim.support_text.lower()
             
-            # Context-aware qualifiers: accept if supported by source
+            # Context-aware qualifiers: only reject if explicit contradiction exists
             if not rejection_reason:
-                vague_indicators = {
-                    "maybe": 0.8, "might": 0.7, "possibly": 0.6,
-                    "probably": 0.5, "could be": 0.6, "appears": 0.7, "seems": 0.75,
+                # Only penalize if source explicitly contradicts the qualifier
+                definite_contradictions = {
+                    "contradicts": 0.9, "refutes": 0.9, "disproves": 0.9,
+                    "false": 0.95, "incorrect": 0.85, "wrong": 0.85,
                 }
                 
-                vague_severity = 0.0
-                for indicator, severity in vague_indicators.items():
-                    if indicator in lower_statement:
-                        vague_severity = max(vague_severity, severity)
+                contradiction_severity = 0.0
+                for indicator, severity in definite_contradictions.items():
+                    if indicator in lower_support:
+                        contradiction_severity = max(contradiction_severity, severity)
                         break
                 
-                if vague_severity > 0 and vague_severity <= 0.5:
-                    supporting_qualifiers = any(
-                        q in lower_support for q in ["may", "might", "could", "possible", "suggest"]
-                    )
-                    if not supporting_qualifiers:
-                        rejection_reason = "REJECTED: Unsupported vague statement"
+                if contradiction_severity > 0.8:
+                    rejection_reason = "REJECTED: Source contradicts statement"
             
-            # Adaptive word count: accept 3+ words with connectors
+            # Adaptive word count: accept 4+ words, or fewer with strong semantics
             if not rejection_reason:
                 word_count = len(claim.statement.split())
-                has_connector = any(w in lower_statement for w in 
-                    ["because", "when", "if", "in", "for", "to", "is", "was", "are"])
+                # Check for semantic richness even in short claims
+                has_semantically_rich_connector = any(w in lower_statement for w in 
+                    ["because", "therefore", "causes", "results", "enables", "defines", "is"])
+                has_entity = any(len(w) > 3 for w in claim.statement.split())
                 
-                if word_count < 3 and not has_connector:
-                    rejection_reason = "REJECTED: Statement too short"
+                # Accept if: 4+ words OR (< 4 words BUT has rich semantics AND has entities)
+                if word_count < 4 and not (has_semantically_rich_connector and has_entity):
+                    rejection_reason = "REJECTED: Statement lacks sufficient information"
             
-            # Logical leap detection: flag unsupported causality
+            # Logical leap detection: only flag unjustified causal claims
+            # Decomposed queries (e.g., "How does X relate to Y?") can have implicit causality
             if not rejection_reason:
-                strong_inferences = [
-                    "therefore", "thus", "consequently", "as a result", "which means",
-                    "implies", "suggests", "indicates", "hence", "leads to"
+                explicit_causal_claims = [
+                    "causes", "directly causes", "is the cause", "resulted in", "led to",
+                    "produced", "generated", "created"
                 ]
-                has_inference = any(w in lower_statement for w in strong_inferences)
+                has_strong_causal = any(w in lower_statement for w in explicit_causal_claims)
                 
-                if has_inference:
-                    support_inference = [
+                if has_strong_causal:
+                    # Only reject if source has NO causal language at all
+                    support_causal = [
                         "because", "due to", "caused by", "results in", "leads to",
-                        "cause", "result", "effect", "therefore", "thus", "consequently"
+                        "cause", "result", "effect", "therefore", "thus", "consequently",
+                        "origin", "source", "root", "foundation"
                     ]
-                    support_has = any(w in lower_support for w in support_inference)
+                    support_has = any(w in lower_support for w in support_causal)
                     
                     if not support_has:
-                        rejection_reason = "REJECTED: Unsupported causal inference"
+                        rejection_reason = "REJECTED: Causal claim lacks supporting evidence"
 
-            # Grounding check: 60% lexical overlap (allows paraphrases)
+            # Grounding check: adaptive overlap based on claim type
+            filtered_tokens = []
             if not rejection_reason:
                 statement_tokens = self._tokenize(lower_statement)
                 support_tokens = set(self._tokenize(lower_support))
@@ -102,8 +119,12 @@ class CriticService:
 
                 overlap = sum(1 for w in filtered_tokens if w in support_tokens)
                 
-                if len(filtered_tokens) > 0 and (overlap / len(filtered_tokens)) < 0.6:
-                    rejection_reason = "REJECTED: Low grounding in source"
+                # Adaptive threshold: speculative claims need less strict overlap
+                claim_type = self._detect_claim_type(claim.statement)
+                threshold = 0.5 if claim_type == "speculative" else 0.6
+                
+                if len(filtered_tokens) > 0 and (overlap / len(filtered_tokens)) < threshold:
+                    rejection_reason = f"REJECTED: Insufficient overlap with source (type: {claim_type})"
 
             # Paraphrase tolerance: 70% key term overlap (skips verbatim check)
             if not rejection_reason:
@@ -112,11 +133,11 @@ class CriticService:
                     support_key_words = set(self._extract_key_terms(lower_support, STOP_WORDS))
                     
                     if key_words:
-                        overlap = key_words.intersection(support_key_words)
-                        if len(overlap) / len(key_words) < 0.7:
+                        overlap_keys = key_words.intersection(support_key_words)
+                        if len(overlap_keys) / len(key_words) < 0.7:
                             rejection_reason = "REJECTED: Key terms missing from source"
 
-            # Relevance check: multi-level (direct match → semantic → rank-based trust)
+            # Initial Relevance Calculation
             entailment_score = 0.0
             if not rejection_reason:
                 claim_tokens = set(w for w in filtered_tokens if w not in STOP_WORDS)
@@ -125,35 +146,73 @@ class CriticService:
 
                 relevance_overlap = task_tokens.intersection(claim_tokens)
                 
-                # Calculate entailment score based on overlap
                 if claim_tokens:
                     entailment_score = len(relevance_overlap) / len(claim_tokens)
                 
+                # Semantic boost check
                 if not relevance_overlap:
-                    # Check semantic connection between support and task
                     support_key = self._extract_key_terms(lower_support, STOP_WORDS)
                     task_key = self._extract_key_terms(task.lower(), STOP_WORDS)
-                    
                     if support_key.intersection(task_key):
-                        # Boost entailment if semantic connection exists via support text
                         entailment_score = max(entailment_score, 0.5)
-                    else:
-                        # Trust top-2 ranked results (search engines filter by relevance)
-                        if claim.source_rank and claim.source_rank > 2:
-                            rejection_reason = "REJECTED: Not relevant (low rank, no keyword overlap)"
-                            entailment_score = 0.0
 
-            if rejection_reason:
+            candidates.append({
+                "claim": claim,
+                "reason": rejection_reason,
+                "score": entailment_score,
+                "entities": [e.lower() for e in claim.discovered_entities]
+            })
+
+        # PASS 2: Bridging & Final Verdict
+        
+        # 2a. Identify Valid Subtopics (Bridging Entities)
+        # Collect entities from claims that are verified AND have high direct relevance
+        verified_subtopics = set()
+        for c in candidates:
+            if not c["reason"] and c["score"] >= 0.4:
+                # This claim is relevant to the main task. Its entities are now valid subtopics.
+                for ent in c["entities"]:
+                    verified_subtopics.add(ent)
+        
+        # 2b. Re-evaluate Low Relevance Claims
+        results = []
+        for c in candidates:
+            claim = c["claim"]
+            reason = c["reason"]
+            score = c["score"]
+            
+            if not reason:
+                # If relevance is low, try to rescue via subtopics
+                if score < 0.1: # Threshold for "low/no relevance"
+                    # Check if claim mentions any verified subtopic
+                    claim_text = (claim.statement + " " + claim.support_text).lower()
+                    
+                    # We accept partial matches for entities (e.g. "RSA" in "RSA Algorithm")
+                    has_subtopic = any(sub in claim_text for sub in verified_subtopics if len(sub) > 2)
+                    
+                    if has_subtopic:
+                        score = 0.5 # Boost to acceptable relevance
+                        # Log the rescue for debugging
+                        self.logger.log("claim_rescued_by_subtopic", {
+                            "claim_id": claim.claim_id,
+                            "subtopic_match": "true"
+                        })
+                    else:
+                        # Fallback to rank-based check
+                         if claim.source_rank and claim.source_rank > 2:
+                            reason = "REJECTED: Not relevant (low rank, no keyword overlap)"
+            
+            if reason:
                 self.logger.log("claim_rejected", {
-                    "claim_id": claim.claim_id, "reason": rejection_reason,
+                    "claim_id": claim.claim_id, "reason": reason,
                     "statement": claim.statement[:50] + "..."
                 })
                 claim.confidence = 0.0
                 results.append(CritiqueResult(
                     claim=claim, 
                     is_valid=False, 
-                    reason=rejection_reason,
-                    entailment_score=entailment_score
+                    reason=reason,
+                    entailment_score=score
                 ))
             else:
                 if claim.confidence < 0.9:
@@ -162,7 +221,7 @@ class CriticService:
                     claim=claim, 
                     is_valid=True, 
                     reason="Verified",
-                    entailment_score=entailment_score
+                    entailment_score=score
                 ))
             
         return results
@@ -191,3 +250,36 @@ class CriticService:
             if len(token) >= 3 and token.lower() not in stop_words:
                 key_terms.add(token.lower())
         return key_terms
+    
+    def _detect_claim_type(self, statement: str) -> str:
+        """Detect claim type: 'factual', 'speculative', or 'mixed'.
+        
+        Factual: Present tense, definitive language, past events
+        Speculative: Modal verbs, uncertainty indicators, conditional
+        """
+        lower_stmt = statement.lower()
+        
+        # Speculative indicators
+        speculative_markers = [
+            "might", "may", "could", "possibly", "perhaps", "likely", "probably",
+            "appears to", "seems to", "suggests", "indicates", "implies", "would",
+            "if", "whether", "could be", "may be", "might be", "could have",
+            "could happen", "remains to be", "awaits", "unclear"
+        ]
+        
+        # Factual indicators
+        factual_markers = [
+            "is", "was", "are", "were", "has been", "have been", "does", "did",
+            "evidence shows", "research confirms", "studies indicate", "proven",
+            "established", "documented", "identified", "discovered", "found"
+        ]
+        
+        speculative_count = sum(1 for m in speculative_markers if m in lower_stmt)
+        factual_count = sum(1 for m in factual_markers if m in lower_stmt)
+        
+        if speculative_count > factual_count:
+            return "speculative"
+        elif factual_count > speculative_count:
+            return "factual"
+        else:
+            return "mixed"
