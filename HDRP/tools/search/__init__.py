@@ -3,6 +3,8 @@ from .base import SearchProvider, SearchError
 from .factory import SearchFactory
 from .simulated import SimulatedSearchProvider
 from .tavily import TavilySearchProvider
+from .google import GoogleSearchProvider
+from .bing import BingSearchProvider
 
 __all__ = [
     "SearchResult", 
@@ -12,4 +14,6 @@ __all__ = [
     "SearchFactory",
     "SimulatedSearchProvider",
     "TavilySearchProvider",
+    "GoogleSearchProvider",
+    "BingSearchProvider",
 ]

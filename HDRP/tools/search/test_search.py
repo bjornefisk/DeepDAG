@@ -65,9 +65,17 @@ class TestSearchTool(unittest.TestCase):
         with self.assertRaises(ValueError):
             SearchFactory.get_provider("invalid_provider_name")
             
-    def test_factory_unimplemented_provider(self):
-        with self.assertRaises(NotImplementedError):
+    def test_factory_google_provider(self):
+        """Test that factory can instantiate Google provider."""
+        # This will fail validation without API key, but should not raise NotImplementedError
+        with self.assertRaises(SearchError):
             SearchFactory.get_provider("google")
+    
+    def test_factory_bing_provider(self):
+        """Test that factory can instantiate Bing provider."""
+        # This will fail validation without API key, but should not raise NotImplementedError
+        with self.assertRaises(SearchError):
+            SearchFactory.get_provider("bing")
 
 
 class TestTavilyProvider(unittest.TestCase):
@@ -94,7 +102,7 @@ class TestTavilyProvider(unittest.TestCase):
         }
         mock_urlopen.return_value = self._mock_urlopen(payload)
 
-        provider = TavilySearchProvider(api_key="test-key")
+        provider = TavilySearchProvider(api_key="test-key", validate_key=False)
         response = provider.search("test query", max_results=3)
 
         self.assertEqual(response.query, "test query")
@@ -113,7 +121,7 @@ class TestTavilyProvider(unittest.TestCase):
         payload = {"results": []}
         mock_urlopen.return_value = self._mock_urlopen(payload)
 
-        provider = TavilySearchProvider(api_key="test-key")
+        provider = TavilySearchProvider(api_key="test-key", validate_key=False)
         response = provider.search("no results", max_results=5)
 
         self.assertEqual(response.total_found, 0)
@@ -132,7 +140,7 @@ class TestTavilyProvider(unittest.TestCase):
         }
         mock_urlopen.return_value = self._mock_urlopen(payload)
 
-        provider = TavilySearchProvider(api_key="test-key")
+        provider = TavilySearchProvider(api_key="test-key", validate_key=False)
         response = provider.search("partial data", max_results=3)
 
         self.assertEqual(len(response.results), 1)
@@ -153,9 +161,230 @@ class TestTavilyProvider(unittest.TestCase):
             fp=None,
         )
 
-        provider = TavilySearchProvider(api_key="test-key")
+        provider = TavilySearchProvider(api_key="test-key", validate_key=False)
         with self.assertRaises(SearchError):
             provider.search("trigger error")
+
+
+class TestGoogleProvider(unittest.TestCase):
+    def _mock_urlopen(self, payload, status: int = 200):
+        mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_resp.getcode.return_value = status
+        mock_resp.read.return_value = json.dumps(payload).encode("utf-8")
+        return mock_resp
+
+    @patch("HDRP.tools.search.google.request.urlopen")
+    def test_google_basic_mapping(self, mock_urlopen):
+        from HDRP.tools.search import GoogleSearchProvider
+        
+        payload = {
+            "items": [
+                {
+                    "title": "Example Google Result",
+                    "link": "https://example.com/page",
+                    "snippet": "This is an example snippet from Google.",
+                    "pagemap": {
+                        "metatags": [
+                            {"article:published_time": "2024-01-15"}
+                        ]
+                    }
+                }
+            ]
+        }
+        mock_urlopen.return_value = self._mock_urlopen(payload)
+
+        provider = GoogleSearchProvider(
+            api_key="test-google-key", 
+            cx="test-cx-id",
+            validate_key=False
+        )
+        response = provider.search("test query", max_results=3)
+
+        self.assertEqual(response.query, "test query")
+        self.assertEqual(len(response.results), 1)
+
+        result = response.results[0]
+        self.assertEqual(result.title, "Example Google Result")
+        self.assertEqual(result.url, "https://example.com/page")
+        self.assertEqual(result.snippet, "This is an example snippet from Google.")
+        self.assertEqual(result.source, "google")
+        self.assertEqual(result.published_date, "2024-01-15")
+
+    @patch("HDRP.tools.search.google.request.urlopen")
+    def test_google_handles_empty_results(self, mock_urlopen):
+        from HDRP.tools.search import GoogleSearchProvider
+        
+        payload = {}  # Google returns no 'items' key when no results
+        mock_urlopen.return_value = self._mock_urlopen(payload)
+
+        provider = GoogleSearchProvider(
+            api_key="test-google-key",
+            cx="test-cx-id",
+            validate_key=False
+        )
+        response = provider.search("no results", max_results=5)
+
+        self.assertEqual(response.total_found, 0)
+        self.assertEqual(len(response.results), 0)
+
+    @patch("HDRP.tools.search.google.request.urlopen")
+    def test_google_tolerates_partial_items(self, mock_urlopen):
+        from HDRP.tools.search import GoogleSearchProvider
+        
+        payload = {
+            "items": [
+                {
+                    # Title intentionally omitted
+                    "link": "https://example.com/partial",
+                    "snippet": "Partial snippet.",
+                }
+            ]
+        }
+        mock_urlopen.return_value = self._mock_urlopen(payload)
+
+        provider = GoogleSearchProvider(
+            api_key="test-google-key",
+            cx="test-cx-id",
+            validate_key=False
+        )
+        response = provider.search("partial data", max_results=3)
+
+        self.assertEqual(len(response.results), 1)
+        result = response.results[0]
+        self.assertEqual(result.title, "Untitled result")
+        self.assertEqual(result.url, "https://example.com/partial")
+        self.assertEqual(result.snippet, "Partial snippet.")
+
+    @patch("HDRP.tools.search.google.request.urlopen")
+    def test_google_http_error_raises_search_error(self, mock_urlopen):
+        from HDRP.tools.search import GoogleSearchProvider
+        from urllib import error as urlerror
+
+        mock_urlopen.side_effect = urlerror.HTTPError(
+            url="https://www.googleapis.com/customsearch/v1",
+            code=403,
+            msg="Forbidden",
+            hdrs=None,
+            fp=None,
+        )
+
+        provider = GoogleSearchProvider(
+            api_key="test-google-key",
+            cx="test-cx-id",
+            validate_key=False
+        )
+        with self.assertRaises(SearchError):
+            provider.search("trigger error")
+
+
+class TestBingProvider(unittest.TestCase):
+    def _mock_urlopen(self, payload, status: int = 200):
+        mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_resp.getcode.return_value = status
+        mock_resp.read.return_value = json.dumps(payload).encode("utf-8")
+        return mock_resp
+
+    @patch("HDRP.tools.search.bing.request.urlopen")
+    def test_bing_basic_mapping(self, mock_urlopen):
+        from HDRP.tools.search import BingSearchProvider
+        
+        payload = {
+            "webPages": {
+                "value": [
+                    {
+                        "name": "Example Bing Result",
+                        "url": "https://example.com/bing-page",
+                        "snippet": "This is an example snippet from Bing.",
+                        "datePublished": "2024-01-20T10:00:00Z"
+                    }
+                ]
+            }
+        }
+        mock_urlopen.return_value = self._mock_urlopen(payload)
+
+        provider = BingSearchProvider(
+            api_key="test-bing-key",
+            validate_key=False
+        )
+        response = provider.search("test query", max_results=3)
+
+        self.assertEqual(response.query, "test query")
+        self.assertEqual(len(response.results), 1)
+
+        result = response.results[0]
+        self.assertEqual(result.title, "Example Bing Result")
+        self.assertEqual(result.url, "https://example.com/bing-page")
+        self.assertEqual(result.snippet, "This is an example snippet from Bing.")
+        self.assertEqual(result.source, "bing")
+        self.assertEqual(result.published_date, "2024-01-20T10:00:00Z")
+
+    @patch("HDRP.tools.search.bing.request.urlopen")
+    def test_bing_handles_empty_results(self, mock_urlopen):
+        from HDRP.tools.search import BingSearchProvider
+        
+        payload = {}  # Bing returns no 'webPages' key when no results
+        mock_urlopen.return_value = self._mock_urlopen(payload)
+
+        provider = BingSearchProvider(
+            api_key="test-bing-key",
+            validate_key=False
+        )
+        response = provider.search("no results", max_results=5)
+
+        self.assertEqual(response.total_found, 0)
+        self.assertEqual(len(response.results), 0)
+
+    @patch("HDRP.tools.search.bing.request.urlopen")
+    def test_bing_tolerates_partial_items(self, mock_urlopen):
+        from HDRP.tools.search import BingSearchProvider
+        
+        payload = {
+            "webPages": {
+                "value": [
+                    {
+                        # Name intentionally omitted
+                        "url": "https://example.com/partial",
+                        "snippet": "Partial snippet from Bing.",
+                    }
+                ]
+            }
+        }
+        mock_urlopen.return_value = self._mock_urlopen(payload)
+
+        provider = BingSearchProvider(
+            api_key="test-bing-key",
+            validate_key=False
+        )
+        response = provider.search("partial data", max_results=3)
+
+        self.assertEqual(len(response.results), 1)
+        result = response.results[0]
+        self.assertEqual(result.title, "Untitled result")
+        self.assertEqual(result.url, "https://example.com/partial")
+        self.assertEqual(result.snippet, "Partial snippet from Bing.")
+
+    @patch("HDRP.tools.search.bing.request.urlopen")
+    def test_bing_http_error_raises_search_error(self, mock_urlopen):
+        from HDRP.tools.search import BingSearchProvider
+        from urllib import error as urlerror
+
+        mock_urlopen.side_effect = urlerror.HTTPError(
+            url="https://api.bing.microsoft.com/v7.0/search",
+            code=401,
+            msg="Unauthorized",
+            hdrs=None,
+            fp=None,
+        )
+
+        provider = BingSearchProvider(
+            api_key="test-bing-key",
+            validate_key=False
+        )
+        with self.assertRaises(SearchError):
+            provider.search("trigger error")
+
 
 if __name__ == '__main__':
     unittest.main()

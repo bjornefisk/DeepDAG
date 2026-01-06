@@ -42,6 +42,7 @@ class TavilySearchProvider(SearchProvider):
         self.search_depth = search_depth
         self.topic = topic
         self.timeout_seconds = timeout_seconds
+        self.validate_key = validate_key
         # Allow callers to override the conventional default.
         self.default_max_results = (
             default_max_results
@@ -71,11 +72,12 @@ class TavilySearchProvider(SearchProvider):
 
         safe_limit = self._validate_limit(max_results)
 
-        # Double-check API key validity (in case validate_key=False was used)
-        try:
-            validate_tavily_api_key(self.api_key, raise_on_invalid=True)
-        except APIKeyError as e:
-            raise SearchError(str(e)) from e
+        # Double-check API key validity (only if validation is enabled)
+        if self.validate_key:
+            try:
+                validate_tavily_api_key(self.api_key, raise_on_invalid=True)
+            except APIKeyError as e:
+                raise SearchError(str(e)) from e
 
         payload: Dict[str, Any] = {
             # API key is passed in the JSON body per Tavily's public HTTP interface.
