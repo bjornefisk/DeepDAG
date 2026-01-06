@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 from HDRP.tools.search.simulated import SimulatedSearchProvider
 from HDRP.services.researcher.service import ResearcherService
 from HDRP.services.critic.service import CriticService
@@ -105,8 +105,8 @@ class TestHDRPIntegration(unittest.TestCase):
         if verified_claims:
             earliest_extraction = min(c.extracted_at for c in verified_claims if c.extracted_at)
             # The earliest extraction should be before now (sanity check)
-            earliest_dt = datetime.fromisoformat(earliest_extraction[:-1])
-            now_dt = datetime.utcnow()
+            earliest_dt = datetime.fromisoformat(earliest_extraction[:-1]).replace(tzinfo=timezone.utc)
+            now_dt = datetime.now(timezone.utc)
             self.assertLessEqual(earliest_dt, now_dt, 
                                 "Extraction timestamps should be in the past")
 
