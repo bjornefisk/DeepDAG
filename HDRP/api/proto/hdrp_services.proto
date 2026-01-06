@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package hdrp.services;
+
+option go_package = "github.com/deepdag/hdrp/api/gen/services";
+
+// ============================================================================
+// Principal Service: Query Decomposition
+// ============================================================================
+
+service PrincipalService {
+  rpc DecomposeQuery (QueryRequest) returns (DecompositionResponse);
+}
+
+message QueryRequest {
+  string query = 1;
+  map<string, string> context = 2;
+  string run_id = 3;
+}
+
+message DecompositionResponse {
+  Graph graph = 1;
+  repeated string subtasks = 2;
+}
+
+message Graph {
+  string id = 1;
+  repeated Node nodes = 2;
+  repeated Edge edges = 3;
+  map<string, string> metadata = 4;
+}
+
+message Node {
+  string id = 1;
+  string type = 2;
+  map<string, string> config = 3;
+  string status = 4;
+  double relevance_score = 5;
+  int32 depth = 6;
+}
+
+message Edge {
+  string from = 1;
+  string to = 2;
+}
+
+// ============================================================================
+// Researcher Service: Claim Extraction
+// ============================================================================
+
+service ResearcherService {
+  rpc Research (ResearchRequest) returns (ResearchResponse);
+}
+
+message ResearchRequest {
+  string query = 1;
+  string source_node_id = 2;
+  string run_id = 3;
+  map<string, string> config = 4;
+}
+
+message ResearchResponse {
+  repeated AtomicClaim claims = 1;
+  int32 total_sources = 2;
+}
+
+message AtomicClaim {
+  string statement = 1;
+  string source_url = 2;
+  string support_text = 3;
+  string source_node_id = 4;
+  string timestamp = 5;
+  string source_title = 6;
+  int32 source_rank = 7;
+}
+
+// ============================================================================
+// Critic Service: Claim Verification
+// ============================================================================
+
+service CriticService {
+  rpc Verify (VerifyRequest) returns (VerifyResponse);
+}
+
+message VerifyRequest {
+  repeated AtomicClaim claims = 1;
+  string task = 2;
+  string run_id = 3;
+}
+
+message VerifyResponse {
+  repeated CritiqueResult results = 1;
+  int32 verified_count = 2;
+  int32 rejected_count = 3;
+}
+
+message CritiqueResult {
+  AtomicClaim claim = 1;
+  bool is_valid = 2;
+  string reasoning = 3;
+  double confidence = 4;
+}
+
+// ============================================================================
+// Synthesizer Service: Report Generation
+// ============================================================================
+
+service SynthesizerService {
+  rpc Synthesize (SynthesizeRequest) returns (SynthesizeResponse);
+}
+
+message SynthesizeRequest {
+  repeated CritiqueResult verification_results = 1;
+  map<string, string> context = 2;
+  string run_id = 3;
+}
+
+message SynthesizeResponse {
+  string report = 1;
+  string artifact_uri = 2;
+}

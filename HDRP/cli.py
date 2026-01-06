@@ -167,6 +167,12 @@ def run(
         "-q",
         help="Research query or objective to investigate.",
     ),
+    mode: str = typer.Option(
+        "python",
+        "--mode",
+        "-m",
+        help="Execution mode: 'python' (direct pipeline) or 'orchestrator' (Go DAG execution).",
+    ),
     provider: Optional[str] = typer.Option(
         None,
         "--provider",
@@ -196,22 +202,35 @@ def run(
 ) -> None:
     """Run a single HDRP research query."""
     provider_display = provider or "auto"
+    mode_display = mode.upper()
+    
     console.print(
         Panel.fit(
             f"[bold cyan]HDRP Research[/bold cyan]\n\n"
             f"[bold]Query:[/bold] {query}\n"
+            f"[bold]Mode:[/bold] {mode_display}\n"
             f"[bold]Provider:[/bold] {provider_display}",
             border_style="cyan",
         )
     )
 
-    exit_code = _run_pipeline(
-        query=query,
-        provider=provider or "",
-        api_key=api_key,
-        output_path=output,
-        verbose=verbose,
-    )
+    if mode.lower() == "orchestrator":
+        from HDRP.orchestrated_runner import run_orchestrated
+        exit_code = run_orchestrated(
+            query=query,
+            provider=provider or "",
+            api_key=api_key,
+            output_path=output,
+            verbose=verbose,
+        )
+    else:
+        exit_code = _run_pipeline(
+            query=query,
+            provider=provider or "",
+            api_key=api_key,
+            output_path=output,
+            verbose=verbose,
+        )
 
     raise typer.Exit(code=exit_code)
 
