@@ -691,6 +691,165 @@ body {
     border-color: var(--accent-blue) !important;
 }
 
+/* Report Viewer Styles */
+.report-viewer {
+    padding: 32px;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.markdown-content {
+    line-height: 1.7;
+    color: var(--text-primary);
+}
+
+.markdown-content h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-top: 0;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.markdown-content h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.markdown-content h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+    font-weight: 600;
+    margin-top: 1.25rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.markdown-content p {
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.markdown-content a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.markdown-content a:hover {
+    color: var(--accent-cyan);
+    text-decoration: underline;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+    margin-bottom: 1rem;
+    padding-left: 2rem;
+}
+
+.markdown-content li {
+    margin-bottom: 0.5rem;
+}
+
+.markdown-content blockquote {
+    margin: 1rem 0;
+    padding-left: 1rem;
+    border-left: 4px solid var(--accent-blue);
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.markdown-content code {
+    background: var(--bg-tertiary);
+    padding: 0.2em 0.4em;
+    border-radius: 4px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9em;
+    color: var(--accent-cyan);
+}
+
+.markdown-content pre {
+    background: var(--bg-tertiary);
+    padding: 1rem;
+    border-radius: var(--radius);
+    overflow-x: auto;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-color);
+}
+
+.markdown-content pre code {
+    background: transparent;
+    padding: 0;
+    color: var(--text-primary);
+}
+
+.markdown-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+}
+
+.markdown-content table th,
+.markdown-content table td {
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    text-align: left;
+}
+
+.markdown-content table th {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.markdown-content table tr:hover {
+    background: var(--bg-secondary);
+}
+
+.markdown-content hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 2rem 0;
+}
+
+.markdown-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius);
+    margin: 1rem 0;
+}
+
+/* Mermaid diagrams in reports */
+.markdown-content .mermaid {
+    background: var(--bg-secondary);
+    padding: 1rem;
+    border-radius: var(--radius);
+    margin: 1.5rem 0;
+}
+
+/* Report metadata stats */
+.report-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
     .sidebar {

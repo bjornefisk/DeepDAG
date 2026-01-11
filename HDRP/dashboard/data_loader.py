@@ -16,6 +16,9 @@ from dataclasses import dataclass, field
 # Path to logs directory  
 LOGS_DIR = Path(__file__).parent.parent / "logs"
 
+# Path to artifacts directory (where reports are saved)
+ARTIFACTS_DIR = Path(__file__).parent.parent / "artifacts"
+
 
 
 @dataclass
@@ -426,4 +429,110 @@ def get_run_progress(run_id: str) -> Optional[Dict[str, Any]]:
         return None
     
     return progress
+
+
+def load_report_content(run_id: str) -> Optional[str]:
+    """
+    Load the research report markdown content for a specific run.
+    
+    Args:
+        run_id: The run ID to load the report for
+        
+    Returns:
+        The markdown content of the report, or None if not found
+    """
+    report_path = ARTIFACTS_DIR / run_id / "report.md"
+    
+    if not report_path.exists():
+        return None
+    
+    try:
+        return report_path.read_text(encoding='utf-8')
+    except IOError:
+        return None
+
+
+def load_report_metadata(run_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Load the metadata JSON for a specific run's report.
+    
+    Args:
+        run_id: The run ID to load metadata for
+        
+    Returns:
+        Dictionary with report metadata, or None if not found
+    """
+    metadata_path = ARTIFACTS_DIR / run_id / "metadata.json"
+    
+    if not metadata_path.exists():
+        return None
+    
+    try:
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (IOError, json.JSONDecodeError):
+        return None
+
+
+def list_available_reports() -> List[Dict[str, Any]]:
+    """
+    List all available research reports from the artifacts directory.
+    
+    Returns:
+        List of dictionaries with run_id, timestamp, query, and file info.
+    """
+    reports = []
+    
+    if not ARTIFACTS_DIR.exists():
+        return reports
+    
+    # Iterate through artifact subdirectories
+    for artifact_dir in ARTIFACTS_DIR.iterdir():
+        if not artifact_dir.is_dir():
+            continue
+        
+        run_id = artifact_dir.name
+        report_path = artifact_dir / "report.md"
+        metadata_path = artifact_dir / "metadata.json"
+        
+        # Skip if no report file exists
+        if not report_path.exists():
+            continue
+        
+        # Load metadata if available
+        metadata = None
+        if metadata_path.exists():
+            try:
+                with open(metadata_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+            except (IOError, json.JSONDecodeError):
+                pass
+        
+        # Get file stats
+        stat = report_path.stat()
+        
+        # Extract info from metadata if available
+        timestamp = None
+        query = ""
+        if metadata:
+            timestamp = metadata.get('generated_at', '')
+            query = metadata.get('query', '')
+        
+        if not timestamp:
+            timestamp = datetime.fromtimestamp(stat.st_mtime).isoformat()
+        
+        reports.append({
+            'run_id': run_id,
+            'timestamp': timestamp,
+            'query': query[:100] + '...' if len(query) > 100 else query,
+            'size_bytes': stat.st_size,
+            'has_metadata': metadata is not None,
+            'total_claims': metadata.get('total_claims', 0) if metadata else 0,
+            'verified_claims': metadata.get('verified_claims', 0) if metadata else 0,
+            'unique_sources': metadata.get('unique_sources', 0) if metadata else 0,
+        })
+    
+    # Sort by timestamp descending (newest first)
+    reports.sort(key=lambda x: x['timestamp'], reverse=True)
+    return reports
 

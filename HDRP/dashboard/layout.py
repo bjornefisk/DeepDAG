@@ -66,6 +66,14 @@ def create_sidebar():
                 children=[
                     html.Div("Research", className="nav-section-title"),
                     html.Button(
+                        id="nav-reports",
+                        className="nav-link",
+                        children=[
+                            html.Span("Reports"),
+                        ],
+                        n_clicks=0,
+                    ),
+                    html.Button(
                         id="nav-runs",
                         className="nav-link",
                         children=[

@@ -22,7 +22,8 @@ from HDRP.dashboard.pages.claims import create_claims_page
 from HDRP.dashboard.pages.dag import create_dag_page
 from HDRP.dashboard.pages.metrics import create_metrics_page
 from HDRP.dashboard.pages.query import create_query_page
-from HDRP.dashboard.data_loader import load_run
+from HDRP.dashboard.pages.reports import create_reports_page
+from HDRP.dashboard.data_loader import load_run, load_report_content
 
 
 # Initialize the Dash app
@@ -42,6 +43,7 @@ app.layout = create_layout()
 @callback(
     Output("page-content", "children"),
     Output("nav-dashboard", "className"),
+    Output("nav-reports", "className"),
     Output("nav-runs", "className"),
     Output("nav-claims", "className"),
     Output("nav-dag", "className"),
@@ -49,6 +51,7 @@ app.layout = create_layout()
     Output("nav-query", "className"),
     Input("url", "pathname"),
     Input("nav-dashboard", "n_clicks"),
+    Input("nav-reports", "n_clicks"),
     Input("nav-runs", "n_clicks"),
     Input("nav-claims", "n_clicks"),
     Input("nav-dag", "n_clicks"),
@@ -57,13 +60,15 @@ app.layout = create_layout()
     State("selected-run-id", "data"),
     prevent_initial_call=False,
 )
-def route_page(pathname, n_dash, n_runs, n_claims, n_dag, n_metrics, n_query, selected_run_id):
+def route_page(pathname, n_dash, n_reports, n_runs, n_claims, n_dag, n_metrics, n_query, selected_run_id):
     """Route to the appropriate page based on URL or navigation clicks."""
     
     # Determine which page to show
     triggered_id = ctx.triggered_id if ctx.triggered_id else None
     
-    if triggered_id == "nav-runs" or pathname == "/runs":
+    if triggered_id == "nav-reports" or pathname == "/reports":
+        page = "reports"
+    elif triggered_id == "nav-runs" or pathname == "/runs":
         page = "runs"
     elif triggered_id == "nav-claims" or pathname == "/claims":
         page = "claims"
@@ -77,7 +82,9 @@ def route_page(pathname, n_dash, n_runs, n_claims, n_dag, n_metrics, n_query, se
         page = "dashboard"
     
     # Generate page content
-    if page == "runs":
+    if page == "reports":
+        content = create_reports_page(selected_run_id)
+    elif page == "runs":
         content = create_runs_page()
     elif page == "claims":
         content = create_claims_page(selected_run_id)
@@ -97,6 +104,7 @@ def route_page(pathname, n_dash, n_runs, n_claims, n_dag, n_metrics, n_query, se
     return (
         content,
         active if page == "dashboard" else base,
+        active if page == "reports" else base,
         active if page == "runs" else base,
         active if page == "claims" else base,
         active if page == "dag" else base,
@@ -158,6 +166,38 @@ def update_metrics_page(run_id):
     if run_id:
         return create_metrics_page(run_id)
     return no_update
+
+
+# Run selector callbacks for Reports page
+@callback(
+    Output("page-content", "children", allow_duplicate=True),
+    Input("report-selector", "value"),
+    prevent_initial_call=True,
+)
+def update_reports_page(run_id):
+    """Update reports page when run is selected."""
+    if run_id:
+        return create_reports_page(run_id)
+    return no_update
+
+
+# Download report callback
+@callback(
+    Output("download-report", "data"),
+    Input("download-report-btn", "n_clicks"),
+    State("report-selector", "value"),
+    prevent_initial_call=True,
+)
+def download_report(n_clicks, run_id):
+    """Download the selected report as markdown."""
+    if not n_clicks or not run_id:
+        return no_update
+    
+    content = load_report_content(run_id)
+    if not content:
+        return no_update
+    
+    return dict(content=content, filename=f"report_{run_id[:8]}.md")
 
 
 # Store selected run from runs table
