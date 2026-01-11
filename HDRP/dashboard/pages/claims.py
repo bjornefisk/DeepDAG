@@ -43,7 +43,18 @@ def create_claims_page(run_id: str = None):
     
     # Run selector dropdown
     runs = list_available_runs()
-    run_options = [{'label': f"{r['run_id'][:16]}... - {r.get('query', 'No query')[:30]}", 'value': r['run_id']} for r in runs[:20]]
+    run_options = []
+    for r in runs[:20]:
+        query = r.get('query', '') or 'Untitled Research'
+        # Truncate long queries
+        if len(query) > 50:
+            query_display = query[:47] + '...'
+        else:
+            query_display = query
+        # Show query with short run ID
+        label = f"{query_display} ({r['run_id'][:8]})"
+        run_options.append({'label': label, 'value': r['run_id']})
+
     
     current_run_id = run_data.run_id if run_data else None
     

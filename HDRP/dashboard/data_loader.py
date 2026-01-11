@@ -145,11 +145,14 @@ def load_run(run_id: str) -> Optional[RunData]:
                 if not run_data.component and component:
                     run_data.component = component
                 
+                # Extract query from any event that has it
+                if isinstance(payload, dict) and 'query' in payload and not run_data.query:
+                    run_data.query = payload['query']
+                
                 # Process different event types
                 if event_type == 'claims_extracted':
                     # Handle claim extraction events
                     if isinstance(payload, dict):
-                        run_data.query = payload.get('query', run_data.query)
                         claims_list = payload.get('claims', [])
                         for claim_data in claims_list:
                             if isinstance(claim_data, dict):

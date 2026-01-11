@@ -395,6 +395,171 @@ def cancel_query(n_clicks, run_id):
     return no_update, html.Div("Failed to cancel query.", style={"color": "#f85149"})
 
 
+# Toggle detailed progress section
+@callback(
+    Output("detailed-progress-content", "style"),
+    Output("toggle-detailed-progress", "children"),
+    Input("toggle-detailed-progress", "n_clicks"),
+    State("detailed-progress-content", "style"),
+    prevent_initial_call=True,
+)
+def toggle_detailed_progress(n_clicks, current_style):
+    """Toggle the detailed progress section visibility."""
+    if not current_style or current_style.get("display") == "none":
+        # Show detailed progress
+        return (
+            {"display": "block", "padding": "16px"},
+            [html.Span("▲", style={"marginRight": "8px", "transition": "transform 0.2s"}), "Hide Detailed Progress"],
+        )
+    else:
+        # Hide detailed progress
+        return (
+            {"display": "none", "padding": "16px"},
+            [html.Span("▼", style={"marginRight": "8px", "transition": "transform 0.2s"}), "Show Detailed Progress"],
+        )
+
+
+# Update detailed progress content
+@callback(
+    Output("detailed-progress-section", "style"),
+    Output("stage-timeline", "children"),
+    Output("live-stats", "children"),
+    Output("activity-log", "children"),
+    Input("status-poll-interval", "n_intervals"),
+    State("current-run-id", "data"),
+    prevent_initial_call=True,
+)
+def update_detailed_progress(n_intervals, run_id):
+    """Update detailed progress information."""
+    if not run_id:
+        return no_update, no_update, no_update, no_update
+    
+    from HDRP.dashboard.api import get_executor
+    from HDRP.dashboard.data_loader import get_latest_events, get_run_progress
+    
+    executor = get_executor()
+    status_data = executor.get_status(run_id)
+    
+    if not status_data or status_data["status"] in ["completed", "failed", "cancelled"]:
+        # Hide detailed section on completion
+        return {"display": "none"}, no_update, no_update, no_update
+    
+    # Show detailed section during execution
+    section_style = {"borderTop": "1px solid #30363d", "display": "block"}
+    
+    # Build stage timeline
+    stages = [
+        ("Initializing", 0, 10),
+        ("Research", 10, 40),
+        ("Verification", 40, 80),
+        ("Synthesis", 80, 100),
+    ]
+    
+    current_progress = status_data.get("progress_percent", 0)
+    
+    timeline_items = []
+    for stage_name, start_pct, end_pct in stages:
+        is_complete = current_progress >= end_pct
+        is_current = start_pct <= current_progress < end_pct
+        
+        icon_style = {
+            "display": "inline-block",
+            "width": "20px",
+            "height": "20px",
+            "borderRadius": "50%",
+            "marginRight": "12px",
+            "border": "2px solid",
+        }
+        
+        if is_complete:
+            icon_style["backgroundColor"] = "#3fb950"
+            icon_style["borderColor"] = "#3fb950"
+            icon = "✓"
+        elif is_current:
+            icon_style["backgroundColor"] = "#58a6ff"
+            icon_style["borderColor"] = "#58a6ff"
+            icon = "●"
+        else:
+            icon_style["backgroundColor"] = "transparent"
+            icon_style["borderColor"] = "#6e7681"
+            icon = ""
+        
+        timeline_items.append(
+            html.Div([
+                html.Span(icon, style={**icon_style, "textAlign": "center", "lineHeight": "16px", "fontSize": "0.7rem"}),
+                html.Span(
+                    stage_name,
+                    style={
+                        "color": "#e6edf3" if (is_complete or is_current) else "#6e7681",
+                        "fontWeight": "500" if is_current else "normal",
+                    }
+                ),
+            ], style={"marginBottom": "8px", "display": "flex", "alignItems": "center"})
+        )
+    
+    # Build live statistics
+    stats = [
+        ("Claims Extracted", status_data.get("claims_extracted", 0), "#58a6ff"),
+        ("Claims Verified", status_data.get("claims_verified", 0), "#3fb950"),
+        ("Claims Rejected", status_data.get("claims_rejected", 0), "#f85149"),
+        ("Sources Processed", status_data.get("sources_processed", 0), "#a371f7"),
+    ]
+    
+    stat_cards = []
+    for label, value, color in stats:
+        stat_cards.append(
+            html.Div([
+                html.Div(label, style={"fontSize": "0.75rem", "color": "#8b949e", "marginBottom": "4px"}),
+                html.Div(str(value), style={"fontSize": "1.5rem", "fontWeight": "700", "color": color}),
+            ], style={
+                "padding": "12px",
+                "backgroundColor": "#161b22",
+                "borderRadius": "6px",
+                "border": f"1px solid {color}33",
+            })
+        )
+    
+    # Build activity log from recent events
+    try:
+        recent_events = get_latest_events(run_id, since_line=max(0, n_intervals * 5 - 20))[-10:]  # Last 10 events
+        
+        if recent_events:
+            log_lines = []
+            for event in recent_events:
+                timestamp = event.get("timestamp", "")[:19].replace("T", " ")
+                event_name = event.get("event", "unknown")
+                payload = event.get("payload", {})
+                
+                # Format event message
+                if event_name == "claims_extracted":
+                    msg = f"Extracted {payload.get('claims_count', 0)} claims from {payload.get('source_title', 'source')}"
+                    color = "#58a6ff"
+                elif event_name == "claim_verified":
+                    msg = f"Verified claim: {payload.get('verdict', 'N/A')}"
+                    color = "#3fb950"
+                elif event_name == "claim_rejected":
+                    msg = f"Rejected claim: {payload.get('reason', 'N/A')}"
+                    color = "#f85149"
+                else:
+                    msg = event_name.replace("_", " ").title()
+                    color = "#8b949e"
+                    
+                log_lines.append(
+                    html.Div([
+                        html.Span(f"[{timestamp}] ", style={"color": "#6e7681"}),
+                        html.Span(msg, style={"color": color}),
+                    ], style={"marginBottom": "4px"})
+                )
+            
+            activity_display = log_lines
+        else:
+            activity_display = [html.Div("No recent activity...", style={"color": "#6e7681"})]
+    except Exception:
+        activity_display = [html.Div("Loading activity...", style={"color": "#6e7681"})]
+    
+    return section_style, timeline_items, stat_cards, activity_display
+
+
 
 def main():
     """Run the dashboard server."""

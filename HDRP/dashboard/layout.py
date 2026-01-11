@@ -9,32 +9,20 @@ from dash import html, dcc
 
 
 def create_info_tooltip(tooltip_id, text):
-    """Create an info icon with tooltip."""
-    return html.Span([
-        html.Span(
-            "ⓘ",
-            id=tooltip_id,
-            style={
-                "cursor": "help",
-                "marginLeft": "8px",
-                "color": "#8b949e",
-                "fontSize": "0.9rem",
-                "fontWeight": "normal",
-            }
-        ),
-        dcc.Tooltip(
-            text,
-            target=tooltip_id,
-            style={
-                "backgroundColor": "#1c2128",
-                "border": "1px solid #30363d",
-                "borderRadius": "6px",
-                "padding": "8px 12px",
-                "fontSize": "0.85rem",
-                "maxWidth": "300px",
-            }
-        )
-    ])
+    """Create an info icon with tooltip using HTML title attribute."""
+    return html.Span(
+        "ⓘ",
+        id=tooltip_id,
+        title=text,  # Use simple HTML title attribute for tooltip
+        style={
+            "cursor": "help",
+            "marginLeft": "8px",
+            "color": "#8b949e",
+            "fontSize": "0.9rem",
+            "fontWeight": "normal",
+        }
+    )
+
 
 
 def create_sidebar():
@@ -62,13 +50,13 @@ def create_sidebar():
                 className="nav-section",
                 children=[
                     html.Div("Overview", className="nav-section-title"),
-                    html.Div(
+                    html.Button(
                         id="nav-dashboard",
                         className="nav-link active",
                         children=[
                             html.Span("Dashboard"),
                         ],
-                        **{"data-page": "dashboard"}
+                        n_clicks=0,
                     ),
                 ]
             ),
@@ -77,29 +65,29 @@ def create_sidebar():
                 className="nav-section",
                 children=[
                     html.Div("Research", className="nav-section-title"),
-                    html.Div(
+                    html.Button(
                         id="nav-runs",
                         className="nav-link",
                         children=[
                             html.Span("Run History"),
                         ],
-                        **{"data-page": "runs"}
+                        n_clicks=0,
                     ),
-                    html.Div(
+                    html.Button(
                         id="nav-claims",
                         className="nav-link",
                         children=[
                             html.Span("Claims"),
                         ],
-                        **{"data-page": "claims"}
+                        n_clicks=0,
                     ),
-                    html.Div(
+                    html.Button(
                         id="nav-dag",
                         className="nav-link",
                         children=[
                             html.Span("DAG View"),
                         ],
-                        **{"data-page": "dag"}
+                        n_clicks=0,
                     ),
                 ]
             ),
@@ -108,13 +96,13 @@ def create_sidebar():
                 className="nav-section",
                 children=[
                     html.Div("Analytics", className="nav-section-title"),
-                    html.Div(
+                    html.Button(
                         id="nav-metrics",
                         className="nav-link",
                         children=[
                             html.Span("Metrics"),
                         ],
-                        **{"data-page": "metrics"}
+                        n_clicks=0,
                     ),
                 ]
             ),
@@ -123,13 +111,13 @@ def create_sidebar():
                 className="nav-section",
                 children=[
                     html.Div("Actions", className="nav-section-title"),
-                    html.Div(
+                    html.Button(
                         id="nav-query",
                         className="nav-link",
                         children=[
                             html.Span("New Query"),
                         ],
-                        **{"data-page": "query"}
+                        n_clicks=0,
                     ),
                 ]
             ),

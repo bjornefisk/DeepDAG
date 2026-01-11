@@ -31,8 +31,17 @@ def create_metrics_page(run_id: str = None):
     
     # Run selector dropdown
     runs = list_available_runs()
-    run_options = [{'label': f"{r['run_id'][:16]}...", 'value': r['run_id']} for r in runs[:20]]
+    run_options = []
+    for r in runs[:20]:
+        query = r.get('query', '') or 'Untitled Research'
+        if len(query) > 50:
+            query_display = query[:47] + '...'
+        else:
+            query_display = query
+        label = f"{query_display} ({r['run_id'][:8]})"
+        run_options.append({'label': label, 'value': r['run_id']})
     current_run_id = run_data.run_id if run_data else None
+
     
     return html.Div([
         # Page header
@@ -205,8 +214,8 @@ def _create_claims_breakdown_chart(run_data) -> go.Figure:
     )])
     
     fig.update_layout(
-        paper_bgcolor='transparent',
-        plot_bgcolor='transparent',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color='#e6edf3'),
         height=280,
         margin=dict(l=20, r=20, t=20, b=20),
@@ -235,8 +244,8 @@ def _create_confidence_distribution_chart(run_data) -> go.Figure:
     )])
     
     fig.update_layout(
-        paper_bgcolor='transparent',
-        plot_bgcolor='transparent',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color='#e6edf3'),
         height=280,
         margin=dict(l=40, r=20, t=20, b=40),
@@ -292,9 +301,9 @@ def _create_metrics_radar_chart(run_data) -> go.Figure:
                 tickfont=dict(color='#e6edf3', size=11),
                 gridcolor='#30363d',
             ),
-            bgcolor='transparent',
+            bgcolor='rgba(0,0,0,0)',
         ),
-        paper_bgcolor='transparent',
+        paper_bgcolor='rgba(0,0,0,0)',
         font=dict(color='#e6edf3'),
         height=280,
         margin=dict(l=60, r=60, t=30, b=30),
@@ -309,8 +318,8 @@ def _create_execution_timeline_chart(run_data) -> go.Figure:
     # Placeholder - would need event timestamps
     fig = go.Figure()
     fig.update_layout(
-        paper_bgcolor='transparent',
-        plot_bgcolor='transparent',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
         height=200,
         margin=dict(l=20, r=20, t=20, b=20),
     )

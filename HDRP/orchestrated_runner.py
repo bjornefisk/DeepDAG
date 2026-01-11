@@ -80,7 +80,7 @@ def run_orchestrated(
         if provider:
             os.environ["HDRP_SEARCH_PROVIDER"] = provider
         if api_key:
-            os.environ["TAVILY_API_KEY"] = api_key
+            os.environ["GOOGLE_API_KEY"] = api_key
         
         # Start Python service servers
         service_configs = [
@@ -233,7 +233,7 @@ def run_orchestrated_programmatic(
         if provider:
             os.environ["HDRP_SEARCH_PROVIDER"] = provider
         if api_key:
-            os.environ["TAVILY_API_KEY"] = api_key
+            os.environ["GOOGLE_API_KEY"] = api_key
         if run_id:
             os.environ["HDRP_RUN_ID"] = run_id
         

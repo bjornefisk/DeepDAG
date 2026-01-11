@@ -135,7 +135,7 @@ def create_query_page():
             ]
         ),
         
-        # Status/output area
+        # Status/output area with detailed progress tracker
         html.Div(
             id="query-status",
             className="card",
@@ -154,7 +154,76 @@ def create_query_page():
                     ],
                     style={"display": "flex", "justifyContent": "space-between", "alignItems": "center"},
                 ),
+                
+                # Main status summary
                 html.Div(id="query-output", style={"padding": "16px"}),
+                
+                # Expandable detailed progress section
+                html.Div(
+                    id="detailed-progress-section",
+                    style={"borderTop": "1px solid #30363d", "display": "none"},
+                    children=[
+                        # Toggle button
+                        html.Button(
+                            [
+                                html.Span("▼", id="progress-toggle-icon", style={"marginRight": "8px", "transition": "transform 0.2s"}),
+                                "Show Detailed Progress"
+                            ],
+                            id="toggle-detailed-progress",
+                            className="btn btn-secondary",
+                            style={
+                                "width": "100%",
+                                "textAlign": "left",
+                                "borderRadius": "0",
+                                "border": "none",
+                                "borderBottom": "1px solid #30363d",
+                                "padding": "12px 16px",
+                            },
+                            n_clicks=0,
+                        ),
+                        
+                        # Detailed progress content (hidden by default)
+                        html.Div(
+                            id="detailed-progress-content",
+                            style={"display": "none", "padding": "16px"},
+                            children=[
+                                # Stage timeline
+                                html.Div([
+                                    html.H4("Pipeline Stages", style={"fontSize": "0.95rem", "marginBottom": "12px", "color": "#8b949e"}),
+                                    html.Div(id="stage-timeline", children=[]),
+                                ], style={"marginBottom": "20px"}),
+                                
+                                # Live statistics
+                                html.Div([
+                                    html.H4("Live Statistics", style={"fontSize": "0.95rem", "marginBottom": "12px", "color": "#8b949e"}),
+                                    html.Div(
+                                        id="live-stats",
+                                        style={"display": "grid", "gridTemplateColumns": "repeat(auto-fit, minmax(150px, 1fr))", "gap": "12px"},
+                                        children=[],
+                                    ),
+                                ], style={"marginBottom": "20px"}),
+                                
+                                # Recent activity log
+                                html.Div([
+                                    html.H4("Recent Activity", style={"fontSize": "0.95rem", "marginBottom": "12px", "color": "#8b949e"}),
+                                    html.Div(
+                                        id="activity-log",
+                                        style={
+                                            "maxHeight": "200px",
+                                            "overflowY": "auto",
+                                            "backgroundColor": "#0d1117",
+                                            "borderRadius": "6px",
+                                            "padding": "12px",
+                                            "fontFamily": "monospace",
+                                            "fontSize": "0.85rem",
+                                        },
+                                        children=[html.Div("Waiting for activity...", style={"color": "#6e7681"})],
+                                    ),
+                                ]),
+                            ],
+                        ),
+                    ],
+                ),
             ]
         ),
         

@@ -18,10 +18,18 @@ def create_runs_page():
     for run in runs:
         # Shorten run_id to first 8 characters for better display
         short_run_id = run['run_id'][:8] if len(run['run_id']) > 8 else run['run_id']
+        query_text = run.get('query', '') or 'Untitled Research'
+        # Truncate very long queries for table display
+        if len(query_text) > 60:
+            query_display = query_text[:57] + '...'
+        else:
+            query_display = query_text
+        
         table_data.append({
+            'query': query_display,
             'run_id': short_run_id,
             'full_run_id': run['run_id'],  # Store full ID for selection
-            'query': run.get('query', '') or 'N/A',
+            'full_query': query_text,  # Store full query for tooltip/details
             'timestamp': run['timestamp'][:19] if run['timestamp'] else '',
             'size': f"{run['size_bytes'] / 1024:.1f} KB",
         })
@@ -57,7 +65,7 @@ def create_runs_page():
                                 dcc.Input(
                                     id="run-search-input",
                                     type="text",
-                                    placeholder="Search runs by ID or query...",
+                                    placeholder="Search runs by query or ID...",
                                     className="form-input",
                                 ),
                             ]
@@ -87,8 +95,8 @@ def create_runs_page():
                 dash_table.DataTable(
                     id="runs-table",
                     columns=[
-                        {"name": "Run ID", "id": "run_id"},
                         {"name": "Query", "id": "query"},
+                        {"name": "ID", "id": "run_id"},
                         {"name": "Timestamp", "id": "timestamp"},
                         {"name": "Size", "id": "size"},
                     ],
@@ -116,8 +124,10 @@ def create_runs_page():
                         "fontFamily": "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
                     },
                     style_cell_conditional=[
-                        {"if": {"column_id": "run_id"}, "fontFamily": "monospace", "color": "#39c5cf"},
-                        {"if": {"column_id": "query"}, "maxWidth": "400px", "overflow": "hidden", "textOverflow": "ellipsis"},
+                        {"if": {"column_id": "query"}, "fontWeight": "500", "maxWidth": "450px", "minWidth": "250px"},
+                        {"if": {"column_id": "run_id"}, "fontFamily": "monospace", "color": "#8b949e", "fontSize": "0.85rem", "maxWidth": "100px"},
+                        {"if": {"column_id": "timestamp"}, "color": "#8b949e", "fontSize": "0.85rem"},
+                        {"if": {"column_id": "size"}, "color": "#8b949e", "fontSize": "0.85rem", "maxWidth": "80px"},
                     ],
                     style_data_conditional=[
                         {
@@ -127,6 +137,14 @@ def create_runs_page():
                         },
                     ],
                     style_as_list_view=True,
+                    tooltip_data=[
+                        {
+                            'query': {'value': row['full_query'], 'type': 'markdown'},
+                            'run_id': {'value': f"**Full ID:** {row['full_run_id']}", 'type': 'markdown'},
+                        }
+                        for row in table_data
+                    ],
+                    tooltip_duration=None,
                 ),
             ]
         ),

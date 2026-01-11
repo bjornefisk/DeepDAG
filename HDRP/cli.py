@@ -4,8 +4,9 @@ HDRP CLI
 
 Typer/Rich-powered command-line interface for running the HDRP research
 pipeline end-to-end using the Python services and pluggable search
-providers (Tavily or simulated).
+providers (Google or simulated).
 """
+
 
 import os
 import sys
@@ -35,8 +36,8 @@ def _build_search_provider(
     """
     Construct a search provider using the existing SearchFactory.
 
-    - When provider == "tavily", prefer explicit api_key if given,
-      otherwise fall back to TAVILY_API_KEY env var.
+    - When provider == "google", prefer explicit api_key if given,
+      otherwise fall back to GOOGLE_API_KEY env var.
     - When provider == "simulated", ignore api_key.
     - When provider is omitted, delegate to SearchFactory.from_env().
     """
@@ -46,15 +47,16 @@ def _build_search_provider(
         # Let factory decide based on HDRP_SEARCH_PROVIDER and friends.
         return SearchFactory.from_env()
 
-    if provider == "tavily":
+    if provider == "google":
         # Explicit key wins; otherwise rely on environment.
-        effective_key = api_key or os.getenv("TAVILY_API_KEY")
-        return SearchFactory.get_provider("tavily", api_key=effective_key)
+        effective_key = api_key or os.getenv("GOOGLE_API_KEY")
+        return SearchFactory.get_provider("google", api_key=effective_key)
 
     if provider == "simulated":
         return SearchFactory.get_provider("simulated")
 
-    raise SystemExit(f"Unknown provider '{provider}'. Use 'tavily' or 'simulated'.")
+    raise SystemExit(f"Unknown provider '{provider}'. Use 'google' or 'simulated'.")
+
 
 
 def _run_pipeline(
@@ -178,15 +180,16 @@ def run(
         "--provider",
         "-p",
         help=(
-            "Search provider to use ('tavily' or 'simulated'). "
-            "If omitted, HDRP_SEARCH_PROVIDER/TAVILY_* env vars are used."
+            "Search provider to use ('google' or 'simulated'). "
+            "If omitted, HDRP_SEARCH_PROVIDER/GOOGLE_* env vars are used."
         ),
     ),
     api_key: Optional[str] = typer.Option(
         None,
         "--api-key",
-        help="Explicit API key for Tavily; overrides TAVILY_API_KEY when set.",
+        help="Explicit API key for Google; overrides GOOGLE_API_KEY when set.",
     ),
+
     output: Optional[str] = typer.Option(
         None,
         "--output",
@@ -248,13 +251,14 @@ def run_query_programmatic(
     
     Args:
         query: Research query to execute
-        provider: Search provider ('tavily', 'simulated', or empty for auto)
+        provider: Search provider ('google', 'simulated', or empty for auto)
         api_key: Optional API key
         verbose: Enable verbose logging
         run_id: Optional run ID (will generate if not provided)
         progress_callback: Optional callback(stage, percent) for progress updates
         
     Returns:
+
         dict: {"success": bool, "run_id": str, "report": str, "error": str}
     """
     # Initialize logger with provided or generated run_id
@@ -268,6 +272,14 @@ def run_query_programmatic(
                 progress_callback(stage, percent)
         
         update_progress("Initializing search provider", 10)
+        
+        # Log the query immediately for dashboard visibility
+        run_logger.log(
+            "query_submitted",
+            {"query": query, "provider": provider},
+            level="info"
+        )
+
         
         # Build search provider
         try:

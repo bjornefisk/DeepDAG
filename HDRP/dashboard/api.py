@@ -85,7 +85,7 @@ class QueryExecutor:
         
         Args:
             query: Research query to execute
-            provider: Search provider ('simulated', 'tavily', 'google')
+            provider: Search provider ('simulated' or 'google')
             mode: Execution mode ('python' or 'orchestrator')
             max_results: Maximum search results
             verbose: Enable verbose logging

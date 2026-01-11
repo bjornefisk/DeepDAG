@@ -102,6 +102,12 @@ body {
     font-size: 0.9rem;
     cursor: pointer;
     font-weight: 400;
+    /* Button reset styles */
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
 }
 
 .nav-link:hover {
@@ -123,6 +129,7 @@ body {
     height: 18px;
     opacity: 0.8;
 }
+
 
 /* Main content */
 .main-content {

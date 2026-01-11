@@ -23,6 +23,11 @@ class ResearcherService:
         """
         max_retries = 2
         search_response = None
+        
+        self.logger.log("research_started", {
+            "query": query,
+            "source_node_id": source_node_id
+        })
 
         for attempt in range(max_retries + 1):
             try:
