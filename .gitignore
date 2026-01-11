@@ -133,3 +133,4 @@ Thumbs.db
 # Logs (uncomment if you want to ignore logs)
 logs/
 *.jsonl
+!web-ui/src/lib/
