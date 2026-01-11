@@ -65,6 +65,11 @@ class ResearchLogger:
         
         # We pass 'event' as the message, but the formatter uses the 'event' attribute
         self.logger.info(event, extra=extra)
+        
+        # Flush all handlers immediately for real-time access
+        for handler in self.logger.handlers:
+            handler.flush()
+
 
     def set_run_id(self, run_id: str):
         """Update the run_id if it changes (e.g. passed via gRPC metadata)"""

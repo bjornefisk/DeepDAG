@@ -13,8 +13,9 @@ from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 
 
-# Path to logs directory
+# Path to logs directory  
 LOGS_DIR = Path(__file__).parent.parent / "logs"
+
 
 
 @dataclass
@@ -299,3 +300,127 @@ def get_demo_data() -> RunData:
             "quality": {"precision": 0.67, "entailment_score": 0.72},
         }
     )
+
+
+def get_latest_events(run_id: str, since_line: int = 0) -> List[Dict[str, Any]]:
+    """
+    Get new log events since a specific line number.
+    
+    Args:
+        run_id: The run ID to get events for
+        since_line: Line number to start from (0-indexed)
+        
+    Returns:
+        List of new events as dictionaries
+    """
+    log_file = LOGS_DIR / f"{run_id}.jsonl"
+    
+    if not log_file.exists():
+        return []
+    
+    events = []
+    try:
+        with open(log_file, 'r', encoding='utf-8') as f:
+            for line_num, line in enumerate(f):
+                if line_num < since_line:
+                    continue
+                
+                line = line.strip()
+                if not line:
+                    continue
+                
+                try:
+                    event = json.loads(line)
+                    events.append(event)
+                except json.JSONDecodeError:
+                    continue
+    
+    except IOError:
+        pass
+    
+    return events
+
+
+def get_run_progress(run_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get progress information for a running query.
+    
+    Args:
+        run_id: The run ID to get progress for
+        
+    Returns:
+        Dictionary with progress information
+    """
+    log_file = LOGS_DIR / f"{run_id}.jsonl"
+    
+    if not log_file.exists():
+        return None
+    
+    progress = {
+        "status": "running",
+        "current_stage": "Initializing...",
+        "progress_percent": 0.0,
+        "claims_extracted": 0,
+        "claims_verified": 0,
+        "claims_rejected": 0,
+        "total_events": 0,
+    }
+    
+    try:
+        with open(log_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                try:
+                    event = json.loads(line)
+                    progress["total_events"] += 1
+                    
+                    event_type = event.get('event', '')
+                    payload = event.get('payload', {})
+                    
+                    # Track progress based on event types
+                    if event_type == 'research_start' or event_type == 'pipeline_start':
+                        progress["current_stage"] = "Starting research..."
+                        progress["progress_percent"] = 10.0
+                    
+                    elif event_type == 'claims_extracted':
+                        claims_list = payload.get('claims', [])
+                        progress["claims_extracted"] += len(claims_list)
+                        progress["current_stage"] = f"Extracted {progress['claims_extracted']} claims"
+                        progress["progress_percent"] = 40.0
+                    
+                    elif event_type == 'claim_verified' or event_type == 'verification_result':
+                        is_valid = payload.get('is_valid', payload.get('verified', False))
+                        if is_valid:
+                            progress["claims_verified"] += 1
+                        else:
+                            progress["claims_rejected"] += 1
+                        
+                        total_verified = progress["claims_verified"] + progress["claims_rejected"]
+                        progress["current_stage"] = f"Verifying claims ({total_verified}/{progress['claims_extracted']})"
+                        progress["progress_percent"] = 40.0 + (total_verified / max(progress['claims_extracted'], 1)) * 40.0
+                    
+                    elif event_type == 'synthesis_start':
+                        progress["current_stage"] = "Synthesizing final report..."
+                        progress["progress_percent"] = 85.0
+                    
+                    elif event_type == 'run_complete' or event_type == 'pipeline_complete':
+                        progress["status"] = "completed"
+                        progress["current_stage"] = "Completed successfully"
+                        progress["progress_percent"] = 100.0
+                    
+                    elif event_type == 'error' or event_type == 'pipeline_failed':
+                        progress["status"] = "failed"
+                        progress["current_stage"] = "Execution failed"
+                        progress["error_message"] = payload.get('error', 'Unknown error')
+                
+                except json.JSONDecodeError:
+                    continue
+    
+    except IOError:
+        return None
+    
+    return progress
+

@@ -194,3 +194,177 @@ def run_orchestrated(
                 proc.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 proc.kill()
+
+
+def run_orchestrated_programmatic(
+    query: str,
+    provider: str = "",
+    api_key: Optional[str] = None,
+    verbose: bool = False,
+    run_id: Optional[str] = None,
+    progress_callback: Optional[callable] = None,
+) -> dict:
+    """
+    Execute query through Go orchestrator (for dashboard integration).
+    
+    Args:
+        query: Research query to execute
+        provider: Search provider
+        api_key: Optional API key
+        verbose: Enable verbose logging
+        run_id: Optional run ID
+        progress_callback: Optional callback(stage, percent) for progress updates
+        
+    Returns:
+        dict: {"success": bool, "run_id": str, "report": str, "error": str}
+    """
+    services = []
+    orchestrator_proc = None
+    
+    try:
+        # Progress update helper
+        def update_progress(stage: str, percent: float):
+            if progress_callback:
+                progress_callback(stage, percent)
+        
+        update_progress("Setting up environment", 5)
+        
+        # Set environment variables
+        if provider:
+            os.environ["HDRP_SEARCH_PROVIDER"] = provider
+        if api_key:
+            os.environ["TAVILY_API_KEY"] = api_key
+        if run_id:
+            os.environ["HDRP_RUN_ID"] = run_id
+        
+        update_progress("Starting Python services", 10)
+        
+        # Start Python service servers
+        service_configs = [
+            ("Principal", 50051, "HDRP/services/principal/principal_server.py"),
+            ("Researcher", 50052, "HDRP/services/researcher/researcher_server.py"),
+            ("Critic", 50053, "HDRP/services/critic/critic_server.py"),
+            ("Synthesizer", 50054, "HDRP/services/synthesizer/synthesizer_server.py"),
+        ]
+        
+        for idx, (service_name, port, script_path) in enumerate(service_configs):
+            proc = start_service_server(service_name, port, script_path)
+            services.append((service_name, proc))
+            
+            if not wait_for_service("localhost", port, timeout=5):
+                return {
+                    "success": False,
+                    "run_id": run_id or "",
+                    "report": "",
+                    "error": f"{service_name} service failed to start",
+                }
+            
+            progress = 10 + ((idx + 1) / len(service_configs)) * 20
+            update_progress(f"Started {service_name} service", progress)
+        
+        update_progress("Starting Go orchestrator", 30)
+        
+        # Start Go orchestrator
+        orchestrator_port = 50055
+        orchestrator_path = "HDRP/orchestrator/server"
+        
+        if not os.path.exists(orchestrator_path):
+            update_progress("Building orchestrator binary", 35)
+            build_result = subprocess.run(
+                ["go", "build", "-o", "server", "./cmd/server"],
+                cwd="HDRP/orchestrator",
+                capture_output=True,
+                text=True
+            )
+            if build_result.returncode != 0:
+                return {
+                    "success": False,
+                    "run_id": run_id or "",
+                    "report": "",
+                    "error": f"Failed to build orchestrator: {build_result.stderr}",
+                }
+        
+        orchestrator_proc = subprocess.Popen(
+            [orchestrator_path, "-port", str(orchestrator_port)],
+            stdout=subprocess.PIPE if not verbose else None,
+            stderr=subprocess.PIPE if not verbose else None,
+            text=True
+        )
+        
+        # Wait for orchestrator
+        time.sleep(2)
+        
+        if orchestrator_proc.poll() is not None:
+            stdout, stderr = orchestrator_proc.communicate()
+            return {
+                "success": False,
+                "run_id": run_id or "",
+                "report": "",
+                "error": f"Orchestrator failed to start: {stderr}",
+            }
+        
+        update_progress("Sending query to orchestrator", 40)
+        
+        # Send query
+        request_data = {
+            "query": query,
+            "provider": provider or "simulated",
+        }
+        
+        response = requests.post(
+            f"http://localhost:{orchestrator_port}/execute",
+            json=request_data,
+            timeout=300
+        )
+        
+        if response.status_code != 200:
+            return {
+                "success": False,
+                "run_id": run_id or "",
+                "report": "",
+                "error": f"Orchestrator request failed: {response.status_code} - {response.text}",
+            }
+        
+        result = response.json()
+        
+        if not result.get("success"):
+            return {
+                "success": False,
+                "run_id": result.get("run_id", run_id or ""),
+                "report": "",
+                "error": result.get("error_message", "Unknown error"),
+            }
+        
+        update_progress("Completed", 100)
+        
+        return {
+            "success": True,
+            "run_id": result.get("run_id", run_id or ""),
+            "report": result.get("report", ""),
+            "error": "",
+        }
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "run_id": run_id or "",
+            "report": "",
+            "error": str(e),
+        }
+    
+    finally:
+        # Cleanup: stop all services
+        if orchestrator_proc:
+            orchestrator_proc.terminate()
+            try:
+                orchestrator_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                orchestrator_proc.kill()
+        
+        for service_name, proc in services:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+

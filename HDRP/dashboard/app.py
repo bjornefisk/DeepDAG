@@ -176,6 +176,226 @@ def store_selected_run(selected_rows, table_data):
     return None
 
 
+# Query execution callbacks
+@callback(
+    Output("execution-status", "data"),
+    Output("current-run-id", "data"),
+    Output("query-status", "style"),
+    Output("status-poll-interval", "disabled"),
+    Output("cancel-query-btn", "style"),
+    Input("submit-query-btn", "n_clicks"),
+    State("query-input", "value"),
+    State("provider-selector", "value"),
+    State("max-results-input", "value"),
+    State("verbose-selector", "value"),
+    prevent_initial_call=True,
+)
+def submit_query(n_clicks, query, provider, max_results, verbose):
+    """Handle query submission."""
+    if not n_clicks or not query or not query.strip():
+        return no_update, no_update, no_update, no_update, no_update
+    
+    from HDRP.dashboard.api import get_executor
+    
+    # Start execution
+    executor = get_executor()
+    run_id = executor.execute_query(
+        query=query.strip(),
+        provider=provider,
+        mode="python",  # Default to Python mode for simplicity
+        max_results=max_results,
+        verbose=verbose,
+    )
+    
+    # Show status card and enable polling
+    return (
+        {"status": "running"},
+        run_id,
+        {"marginTop": "24px", "display": "block"},
+        False,  # Enable polling
+        {"fontSize": "0.875rem", "padding": "4px 12px", "display": "inline-block"},  # Show cancel button
+    )
+
+
+@callback(
+    Output("query-input", "value"),
+    Output("max-results-input", "value"),
+    Output("verbose-selector", "value"),
+    Input("clear-query-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def clear_query_form(n_clicks):
+    """Clear the query form."""
+    if not n_clicks:
+        return no_update, no_update, no_update
+    return "", 10, False
+
+
+@callback(
+    Output("query-output", "children"),
+    Output("execution-status", "data", allow_duplicate=True),
+    Output("status-poll-interval", "disabled", allow_duplicate=True),
+    Output("cancel-query-btn", "style", allow_duplicate=True),
+    Input("status-poll-interval", "n_intervals"),
+    State("current-run-id", "data"),
+    prevent_initial_call=True,
+)
+def poll_execution_status(n_intervals, run_id):
+    """Poll execution status and update display."""
+    if not run_id:
+        return no_update, no_update, no_update, no_update
+    
+    from HDRP.dashboard.api import get_executor
+    
+    executor = get_executor()
+    status_data = executor.get_status(run_id)
+    
+    if not status_data:
+        return "Execution not found.", {"status": "error"}, True, {"display": "none"}
+    
+    status = status_data["status"]
+    
+    # Build status display
+    output = html.Div([
+        html.Div([
+            html.Strong("Run ID: "),
+            html.Code(run_id[:8] + "...", style={"color": "#58a6ff"}),
+        ], style={"marginBottom": "8px"}),
+        
+        html.Div([
+            html.Strong("Status: "),
+            html.Span(
+                status.upper(),
+                style={
+                    "color": "#3fb950" if status == "completed" else
+                           "#f85149" if status == "failed" else
+                           "#d29922" if status == "cancelled" else "#58a6ff",
+                    "fontWeight": "bold",
+                }
+            ),
+        ], style={"marginBottom": "8px"}),
+        
+        html.Div([
+            html.Strong("Progress: "),
+            html.Span(f"{status_data['progress_percent']:.0f}%"),
+        ], style={"marginBottom": "8px"}),
+        
+        html.Div([
+            html.Div(
+                style={
+                    "width": f"{status_data['progress_percent']}%",
+                    "height": "8px",
+                    "backgroundColor": "#3fb950" if status == "completed" else "#58a6ff",
+                    "borderRadius": "4px",
+                    "transition": "width 0.3s ease",
+                }
+            ),
+        ], style={
+            "width": "100%",
+            "height": "8px",
+            "backgroundColor": "#21262d",
+            "borderRadius": "4px",
+            "marginBottom": "16px",
+            "overflow": "hidden",
+        }),
+        
+        html.Div([
+            html.Strong("Current Stage: "),
+            html.Span(status_data["current_stage"]),
+        ], style={"marginBottom": "8px"}),
+        
+        # Show claim stats if available
+        html.Div([
+            html.Div([
+                html.Strong("Claims Extracted: "),
+                html.Span(str(status_data.get("claims_extracted", 0))),
+            ], style={"marginRight": "16px", "display": "inline-block"}),
+            html.Div([
+                html.Strong("Verified: "),
+                html.Span(str(status_data.get("claims_verified", 0)), style={"color": "#3fb950"}),
+            ], style={"marginRight": "16px", "display": "inline-block"}),
+            html.Div([
+                html.Strong("Rejected: "),
+                html.Span(str(status_data.get("claims_rejected", 0)), style={"color": "#f85149"}),
+            ], style={"display": "inline-block"}),
+        ], style={"marginBottom": "16px"}) if status_data.get("claims_extracted", 0) > 0 else None,
+        
+        # Show error message if failed
+        html.Div([
+            html.Strong("Error: ", style={"color": "#f85149"}),
+            html.Pre(
+                status_data["error_message"],
+                style={
+                    "backgroundColor": "#21262d",
+                    "padding": "12px",
+                    "borderRadius": "6px",
+                    "marginTop": "8px",
+                    "whiteSpace": "pre-wrap",
+                    "wordWrap": "break-word",
+                }
+            ),
+        ]) if status_data.get("error_message") else None,
+        
+        # Show completion message with link to run history
+        html.Div([
+            html.Div("✓ Execution completed successfully!", style={"marginBottom": "12px", "color": "#3fb950", "fontSize": "1.1rem"}),
+            html.Div([
+                html.Span("View in "),
+                dcc.Link(
+                    "Run History",
+                    href="/runs",
+                    style={"color": "#58a6ff", "textDecoration": "none", "fontWeight": "bold"},
+                ),
+                html.Span(" or check "),
+                dcc.Link(
+                    "Claims",
+                    href="/claims",
+                    style={"color": "#58a6ff", "textDecoration": "none", "fontWeight": "bold"},
+                ),
+            ]),
+        ], style={
+            "marginTop": "16px",
+            "padding": "12px",
+            "backgroundColor": "rgba(63, 185, 80, 0.1)",
+            "borderRadius": "6px",
+            "border": "1px solid #3fb950",
+        }) if status == "completed" else None,
+    ])
+    
+    # Disable polling if execution is complete
+    should_poll = status in ["queued", "running"]
+    hide_cancel = {"fontSize": "0.875rem", "padding": "4px 12px", "display": "none"} if not should_poll else no_update
+    
+    return output, {"status": status}, not should_poll, hide_cancel
+
+
+@callback(
+    Output("execution-status", "data", allow_duplicate=True),
+    Output("query-output", "children", allow_duplicate=True),
+    Input("cancel-query-btn", "n_clicks"),
+    State("current-run-id", "data"),
+    prevent_initial_call=True,
+)
+def cancel_query(n_clicks, run_id):
+    """Cancel running query."""
+    if not n_clicks or not run_id:
+        return no_update, no_update
+    
+    from HDRP.dashboard.api import get_executor
+    
+    executor = get_executor()
+    cancelled = executor.cancel_query(run_id)
+    
+    if cancelled:
+        return (
+            {"status": "cancelled"},
+            html.Div("Query execution cancelled.", style={"color": "#d29922"}),
+        )
+    
+    return no_update, html.Div("Failed to cancel query.", style={"color": "#f85149"})
+
+
+
 def main():
     """Run the dashboard server."""
     import argparse

@@ -143,11 +143,33 @@ def create_query_page():
             children=[
                 html.Div(
                     className="card-header",
-                    children=[html.H3("Execution Status", className="card-title")]
+                    children=[
+                        html.H3("Execution Status", className="card-title", style={"display": "inline-block", "marginRight": "12px"}),
+                        html.Button(
+                            "Cancel",
+                            id="cancel-query-btn",
+                            className="btn btn-secondary",
+                            style={"fontSize": "0.875rem", "padding": "4px 12px", "display": "none"},
+                        ),
+                    ],
+                    style={"display": "flex", "justifyContent": "space-between", "alignItems": "center"},
                 ),
-                html.Div(id="query-output"),
+                html.Div(id="query-output", style={"padding": "16px"}),
             ]
         ),
+        
+        # Hidden state stores for execution tracking
+        dcc.Store(id="execution-status", data=None),
+        dcc.Store(id="current-run-id", data=None),
+        
+        # Polling interval for status updates (disabled by default)
+        dcc.Interval(
+            id="status-poll-interval",
+            interval=2000,  # 2 seconds
+            disabled=True,
+            n_intervals=0,
+        ),
+
         
         # Info card
         html.Div(
