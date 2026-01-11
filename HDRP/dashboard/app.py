@@ -170,7 +170,8 @@ def update_metrics_page(run_id):
 def store_selected_run(selected_rows, table_data):
     """Store the selected run ID."""
     if selected_rows and table_data:
-        run_id = table_data[selected_rows[0]]["run_id"]
+        # Use full_run_id if available, otherwise run_id
+        run_id = table_data[selected_rows[0]].get("full_run_id") or table_data[selected_rows[0]]["run_id"]
         return run_id
     return None
 

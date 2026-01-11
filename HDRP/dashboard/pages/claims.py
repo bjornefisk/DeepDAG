@@ -6,6 +6,7 @@ Interactive table showing atomic claims with filtering and details.
 
 from dash import html, dcc, dash_table
 from HDRP.dashboard.data_loader import load_run, list_available_runs, get_demo_data
+from HDRP.dashboard.layout import create_info_tooltip
 
 
 def create_claims_page(run_id: str = None):
@@ -51,7 +52,13 @@ def create_claims_page(run_id: str = None):
         html.Div(
             className="page-header",
             children=[
-                html.H1("Claims Viewer", className="page-title"),
+                html.Div([
+                    html.H1("Claims Viewer", className="page-title", style={"display": "inline-block", "marginRight": "0"}),
+                    create_info_tooltip(
+                        "claims-info",
+                        "View atomic claims extracted from research runs. Each claim shows verification status, confidence scores, source information, and entailment metrics. Use filters to find specific claims."
+                    ),
+                ]),
                 html.P("View and filter atomic claims from research runs", className="page-subtitle"),
             ]
         ),

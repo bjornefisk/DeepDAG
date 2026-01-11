@@ -7,6 +7,7 @@ Shows the research DAG using Cytoscape for interactivity.
 from dash import html, dcc
 import dash_cytoscape as cyto
 from HDRP.dashboard.data_loader import load_run, list_available_runs, get_demo_data
+from HDRP.dashboard.layout import create_info_tooltip
 
 
 def create_dag_page(run_id: str = None):
@@ -34,7 +35,13 @@ def create_dag_page(run_id: str = None):
         html.Div(
             className="page-header",
             children=[
-                html.H1("DAG Visualization", className="page-title"),
+                html.Div([
+                    html.H1("DAG Visualization", className="page-title", style={"display": "inline-block", "marginRight": "0"}),
+                    create_info_tooltip(
+                        "dag-info",
+                        "Interactive directed acyclic graph showing the research process flow. Nodes represent queries, claims, and reports. Colors indicate verification status. Use layout controls to adjust the visualization."
+                    ),
+                ]),
                 html.P("Interactive view of the research dependency graph", className="page-subtitle"),
             ]
         ),

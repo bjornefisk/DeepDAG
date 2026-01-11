@@ -5,6 +5,7 @@ Form to submit new research queries.
 """
 
 from dash import html, dcc
+from HDRP.dashboard.layout import create_info_tooltip
 
 
 def create_query_page():
@@ -14,7 +15,13 @@ def create_query_page():
         html.Div(
             className="page-header",
             children=[
-                html.H1("New Query", className="page-title"),
+                html.Div([
+                    html.H1("New Query", className="page-title", style={"display": "inline-block", "marginRight": "0"}),
+                    create_info_tooltip(
+                        "query-info",
+                        "Submit a new research query for HDRP to process. Your query will be decomposed into sub-questions, researched across sources, and synthesized into a verified report with claims and citations."
+                    ),
+                ]),
                 html.P("Submit a new research query to HDRP", className="page-subtitle"),
             ]
         ),

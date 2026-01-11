@@ -6,6 +6,7 @@ Lists all research runs with filtering and selection.
 
 from dash import html, dcc, dash_table
 from HDRP.dashboard.data_loader import list_available_runs
+from HDRP.dashboard.layout import create_info_tooltip
 
 
 def create_runs_page():
@@ -15,8 +16,11 @@ def create_runs_page():
     # Format runs for table
     table_data = []
     for run in runs:
+        # Shorten run_id to first 8 characters for better display
+        short_run_id = run['run_id'][:8] if len(run['run_id']) > 8 else run['run_id']
         table_data.append({
-            'run_id': run['run_id'],
+            'run_id': short_run_id,
+            'full_run_id': run['run_id'],  # Store full ID for selection
             'query': run.get('query', '') or 'N/A',
             'timestamp': run['timestamp'][:19] if run['timestamp'] else '',
             'size': f"{run['size_bytes'] / 1024:.1f} KB",
@@ -27,7 +31,13 @@ def create_runs_page():
         html.Div(
             className="page-header",
             children=[
-                html.H1("Run History", className="page-title"),
+                html.Div([
+                    html.H1("Run History", className="page-title", style={"display": "inline-block", "marginRight": "0"}),
+                    create_info_tooltip(
+                        "run-history-info",
+                        "Browse and review all past research executions. Each run represents a completed query with its associated claims, DAG structure, and metrics. Click on a row to view details."
+                    ),
+                ]),
                 html.P("Browse past research executions", className="page-subtitle"),
             ]
         ),

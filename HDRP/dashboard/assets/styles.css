@@ -21,6 +21,10 @@
 }
 
 /* Base styles */
+* {
+    box-sizing: border-box;
+}
+
 body {
     background-color: var(--bg-primary);
     color: var(--text-primary);
@@ -28,6 +32,8 @@ body {
     margin: 0;
     padding: 0;
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 /* Layout */
@@ -76,10 +82,10 @@ body {
 
 .nav-section-title {
     color: var(--text-muted);
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
     padding: 0 8px;
     margin-bottom: 8px;
 }
@@ -88,24 +94,28 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px 12px;
+    padding: 10px 14px;
     color: var(--text-secondary);
     text-decoration: none;
     border-radius: var(--radius);
-    transition: all 0.15s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     font-size: 0.9rem;
     cursor: pointer;
+    font-weight: 400;
 }
 
 .nav-link:hover {
     background: var(--bg-tertiary);
     color: var(--text-primary);
+    transform: translateX(2px);
 }
 
 .nav-link.active {
     background: linear-gradient(135deg, rgba(88, 166, 255, 0.15), rgba(88, 166, 255, 0.08));
     color: var(--accent-blue);
     font-weight: 500;
+    border-left: 3px solid var(--accent-blue);
+    padding-left: 11px;
 }
 
 .nav-link svg {
@@ -131,12 +141,14 @@ body {
     font-weight: 600;
     color: var(--text-primary);
     margin: 0 0 8px;
+    letter-spacing: -0.02em;
 }
 
 .page-subtitle {
     color: var(--text-secondary);
     font-size: 0.95rem;
     margin: 0;
+    font-weight: 400;
 }
 
 /* Cards */
@@ -146,7 +158,12 @@ body {
     border-radius: var(--radius-lg);
     padding: 24px;
     margin-bottom: 24px;
-    box-shadow: var(--shadow);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    transition: box-shadow 0.2s ease;
+}
+
+.card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .card-header {
@@ -174,12 +191,19 @@ body {
 }
 
 .stat-card {
-    background: linear-gradient(135deg, var(--bg-card), var(--bg-secondary));
+    background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     padding: 20px 24px;
     position: relative;
     overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+    border-color: var(--stat-accent, var(--accent-blue));
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .stat-card::before {
@@ -187,7 +211,7 @@ body {
     position: absolute;
     top: 0;
     left: 0;
-    width: 4px;
+    width: 3px;
     height: 100%;
     background: var(--stat-accent, var(--accent-blue));
 }
@@ -203,17 +227,21 @@ body {
     color: var(--text-secondary);
     font-size: 0.85rem;
     margin-bottom: 8px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
 }
 
 .stat-value {
     font-size: 1.75rem;
     font-weight: 700;
     color: var(--text-primary);
+    letter-spacing: -0.02em;
 }
 
 .stat-change {
     font-size: 0.8rem;
     margin-top: 8px;
+    font-weight: 500;
 }
 
 .stat-change.positive { color: var(--accent-green); }
@@ -403,17 +431,25 @@ body {
     font-size: 0.9rem;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     border: none;
+    box-sizing: border-box;
 }
 
 .btn-primary {
     background: var(--accent-blue);
     color: #fff;
+    box-shadow: 0 2px 4px rgba(88, 166, 255, 0.3);
 }
 
 .btn-primary:hover {
     background: #4393e6;
+    box-shadow: 0 4px 8px rgba(88, 166, 255, 0.4);
+    transform: translateY(-1px);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
 }
 
 .btn-secondary {
@@ -424,6 +460,12 @@ body {
 
 .btn-secondary:hover {
     background: var(--border-color);
+    border-color: var(--text-muted);
+    transform: translateY(-1px);
+}
+
+.btn-secondary:active {
+    transform: translateY(0);
 }
 
 /* Form elements */
@@ -449,6 +491,7 @@ body {
     color: var(--text-primary);
     font-size: 0.95rem;
     transition: border-color 0.15s ease;
+    box-sizing: border-box;
 }
 
 .form-input:focus,
@@ -459,6 +502,88 @@ body {
 
 .form-input::placeholder {
     color: var(--text-muted);
+}
+
+/* Dash Dropdown styling improvements for better visibility */
+.Select-control {
+    background: var(--bg-tertiary) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-primary) !important;
+    box-sizing: border-box !important;
+}
+
+.Select-menu-outer {
+    background: var(--bg-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+    box-sizing: border-box !important;
+}
+
+.Select-menu {
+    max-height: 250px !important;
+}
+
+.Select-option {
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    padding: 10px 14px !important;
+    cursor: pointer !important;
+}
+
+.Select-option.is-focused {
+    background: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+}
+
+.Select-option.is-selected {
+    background: rgba(88, 166, 255, 0.2) !important;
+    color: var(--accent-blue) !important;
+    font-weight: 500 !important;
+}
+
+.Select-value-label,
+.Select-placeholder {
+    color: var(--text-primary) !important;
+}
+
+.Select-input > input {
+    color: var(--text-primary) !important;
+}
+
+.Select-arrow {
+    border-color: var(--text-secondary) transparent transparent !important;
+}
+
+/* Modern dropdown styling - newer Dash versions */
+.dash-dropdown {
+    box-sizing: border-box !important;
+}
+
+.dash-dropdown .Select-control {
+    background-color: var(--bg-tertiary) !important;
+    border-color: var(--border-color) !important;
+}
+
+.dash-dropdown .Select-menu-outer {
+    background-color: var(--bg-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    z-index: 9999 !important;
+}
+
+.dash-dropdown .Select-menu .Select-option {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    font-weight: 400 !important;
+}
+
+.dash-dropdown .Select-menu .Select-option:hover,
+.dash-dropdown .Select-menu .Select-option.is-focused {
+    background-color: var(--bg-tertiary) !important;
+}
+
+.dash-dropdown .Select-menu .Select-option.is-selected {
+    background-color: rgba(88, 166, 255, 0.25) !important;
+    color: var(--accent-blue) !important;
 }
 
 /* Loading spinner */

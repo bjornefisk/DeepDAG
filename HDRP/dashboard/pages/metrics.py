@@ -8,6 +8,7 @@ from dash import html, dcc
 import plotly.graph_objects as go
 import plotly.express as px
 from HDRP.dashboard.data_loader import load_run, list_available_runs, get_demo_data
+from HDRP.dashboard.layout import create_info_tooltip
 
 
 def create_metrics_page(run_id: str = None):
@@ -38,7 +39,13 @@ def create_metrics_page(run_id: str = None):
         html.Div(
             className="page-header",
             children=[
-                html.H1("Metrics Dashboard", className="page-title"),
+                html.Div([
+                    html.H1("Metrics Dashboard", className="page-title", style={"display": "inline-block", "marginRight": "0"}),
+                    create_info_tooltip(
+                        "metrics-info",
+                        "Comprehensive analytics for research runs including execution performance, claim quality metrics, confidence distributions, and source coverage. Compare metrics across different runs."
+                    ),
+                ]),
                 html.P("Performance, quality, and trajectory analysis", className="page-subtitle"),
             ]
         ),

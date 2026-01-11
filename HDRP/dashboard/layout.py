@@ -8,6 +8,35 @@ and page content container.
 from dash import html, dcc
 
 
+def create_info_tooltip(tooltip_id, text):
+    """Create an info icon with tooltip."""
+    return html.Span([
+        html.Span(
+            "ⓘ",
+            id=tooltip_id,
+            style={
+                "cursor": "help",
+                "marginLeft": "8px",
+                "color": "#8b949e",
+                "fontSize": "0.9rem",
+                "fontWeight": "normal",
+            }
+        ),
+        dcc.Tooltip(
+            text,
+            target=tooltip_id,
+            style={
+                "backgroundColor": "#1c2128",
+                "border": "1px solid #30363d",
+                "borderRadius": "6px",
+                "padding": "8px 12px",
+                "fontSize": "0.85rem",
+                "maxWidth": "300px",
+            }
+        )
+    ])
+
+
 def create_sidebar():
     """Create the sidebar navigation."""
     return html.Div(
@@ -37,7 +66,6 @@ def create_sidebar():
                         id="nav-dashboard",
                         className="nav-link active",
                         children=[
-                            html.Span("📊"),
                             html.Span("Dashboard"),
                         ],
                         **{"data-page": "dashboard"}
@@ -53,7 +81,6 @@ def create_sidebar():
                         id="nav-runs",
                         className="nav-link",
                         children=[
-                            html.Span("📋"),
                             html.Span("Run History"),
                         ],
                         **{"data-page": "runs"}
@@ -62,7 +89,6 @@ def create_sidebar():
                         id="nav-claims",
                         className="nav-link",
                         children=[
-                            html.Span("✓"),
                             html.Span("Claims"),
                         ],
                         **{"data-page": "claims"}
@@ -71,7 +97,6 @@ def create_sidebar():
                         id="nav-dag",
                         className="nav-link",
                         children=[
-                            html.Span("🔗"),
                             html.Span("DAG View"),
                         ],
                         **{"data-page": "dag"}
@@ -87,7 +112,6 @@ def create_sidebar():
                         id="nav-metrics",
                         className="nav-link",
                         children=[
-                            html.Span("📈"),
                             html.Span("Metrics"),
                         ],
                         **{"data-page": "metrics"}
@@ -103,7 +127,6 @@ def create_sidebar():
                         id="nav-query",
                         className="nav-link",
                         children=[
-                            html.Span("🔍"),
                             html.Span("New Query"),
                         ],
                         **{"data-page": "query"}
