@@ -184,5 +184,250 @@ class TestGoogleProvider(unittest.TestCase):
             provider.search("trigger error")
 
 
+class TestSearchFactoryFromEnv(unittest.TestCase):
+    """Tests for SearchFactory.from_env() with various env configurations."""
+
+    def test_from_env_default_simulated(self):
+        """Verify from_env() returns simulated when no env vars set."""
+        with patch.dict('os.environ', {}, clear=True):
+            provider = SearchFactory.from_env()
+        
+        # Should return simulated provider
+        self.assertTrue(provider.health_check())
+
+    def test_from_env_respects_provider_env_var(self):
+        """Verify from_env() uses HDRP_SEARCH_PROVIDER."""
+        with patch.dict('os.environ', {'HDRP_SEARCH_PROVIDER': 'simulated'}, clear=True):
+            provider = SearchFactory.from_env()
+        
+        self.assertTrue(provider.health_check())
+
+    @patch('HDRP.tools.search.factory.SearchFactory.get_provider')
+    def test_from_env_google_with_env_vars(self, mock_get_provider):
+        """Verify from_env() passes Google config from env vars."""
+        mock_provider = MagicMock()
+        mock_provider.health_check.return_value = True
+        mock_get_provider.return_value = mock_provider
+        
+        env = {
+            'HDRP_SEARCH_PROVIDER': 'google',
+            'GOOGLE_API_KEY': 'test-key',
+            'GOOGLE_CX': 'test-cx',
+            'GOOGLE_TIMEOUT_SECONDS': '10.0',
+            'GOOGLE_MAX_RESULTS': '5',
+        }
+        with patch.dict('os.environ', env, clear=True):
+            provider = SearchFactory.from_env()
+        
+        # Should have called get_provider with google config
+        mock_get_provider.assert_called_with(
+            'google',
+            api_key='test-key',
+            cx='test-cx',
+            timeout_seconds=10.0,
+            default_max_results=5,
+        )
+
+    @patch('HDRP.tools.search.factory.SearchFactory.get_provider')
+    def test_from_env_handles_invalid_timeout(self, mock_get_provider):
+        """Verify from_env() handles invalid timeout gracefully."""
+        mock_provider = MagicMock()
+        mock_provider.health_check.return_value = True
+        mock_get_provider.return_value = mock_provider
+        
+        env = {
+            'HDRP_SEARCH_PROVIDER': 'google',
+            'GOOGLE_API_KEY': 'test-key',
+            'GOOGLE_CX': 'test-cx',
+            'GOOGLE_TIMEOUT_SECONDS': 'not-a-number',
+        }
+        with patch.dict('os.environ', env, clear=True):
+            provider = SearchFactory.from_env()
+        
+        # Should have used default timeout (8.0)
+        call_kwargs = mock_get_provider.call_args[1]
+        self.assertEqual(call_kwargs['timeout_seconds'], 8.0)
+
+    @patch('HDRP.tools.search.factory.SearchFactory.get_provider')
+    def test_from_env_handles_invalid_max_results(self, mock_get_provider):
+        """Verify from_env() handles invalid max_results gracefully."""
+        mock_provider = MagicMock()
+        mock_provider.health_check.return_value = True
+        mock_get_provider.return_value = mock_provider
+        
+        env = {
+            'HDRP_SEARCH_PROVIDER': 'google',
+            'GOOGLE_API_KEY': 'test-key',
+            'GOOGLE_CX': 'test-cx',
+            'GOOGLE_MAX_RESULTS': 'invalid',
+        }
+        with patch.dict('os.environ', env, clear=True):
+            provider = SearchFactory.from_env()
+        
+        # Should have used None for default_max_results
+        call_kwargs = mock_get_provider.call_args[1]
+        self.assertIsNone(call_kwargs['default_max_results'])
+
+
+class TestSearchFactoryFallback(unittest.TestCase):
+    """Tests for fallback behavior when providers fail health checks."""
+
+    def test_fallback_to_simulated_on_health_check_failure(self):
+        """Verify fallback to simulated when Google health check fails."""
+        with patch('HDRP.tools.search.factory.SearchFactory.get_provider') as mock_get:
+            # First call (google) returns provider that fails health check
+            mock_google = MagicMock()
+            mock_google.health_check.return_value = False
+            
+            # Second call (simulated) returns working provider
+            mock_simulated = MagicMock()
+            mock_simulated.health_check.return_value = True
+            
+            mock_get.side_effect = [mock_google, mock_simulated]
+            
+            env = {
+                'HDRP_SEARCH_PROVIDER': 'google',
+                'GOOGLE_API_KEY': 'test-key',
+                'GOOGLE_CX': 'test-cx',
+            }
+            with patch.dict('os.environ', env, clear=True):
+                provider = SearchFactory.from_env(strict_mode=False)
+            
+            # Should have fallen back to simulated
+            self.assertEqual(provider, mock_simulated)
+
+    def test_strict_mode_raises_on_health_check_failure(self):
+        """Verify strict mode raises instead of falling back."""
+        with patch('HDRP.tools.search.factory.SearchFactory.get_provider') as mock_get:
+            mock_google = MagicMock()
+            mock_google.health_check.return_value = False
+            mock_get.return_value = mock_google
+            
+            env = {
+                'HDRP_SEARCH_PROVIDER': 'google',
+                'GOOGLE_API_KEY': 'test-key',
+                'GOOGLE_CX': 'test-cx',
+            }
+            with patch.dict('os.environ', env, clear=True):
+                with self.assertRaises(SearchError):
+                    SearchFactory.from_env(strict_mode=True)
+
+    def test_fallback_on_search_error_during_init(self):
+        """Verify fallback when SearchError raised during initialization."""
+        with patch('HDRP.tools.search.factory.SearchFactory.get_provider') as mock_get:
+            # First call raises SearchError
+            mock_simulated = MagicMock()
+            mock_simulated.health_check.return_value = True
+            
+            mock_get.side_effect = [SearchError("Init failed"), mock_simulated]
+            
+            env = {
+                'HDRP_SEARCH_PROVIDER': 'google',
+                'GOOGLE_API_KEY': 'test-key',
+                'GOOGLE_CX': 'test-cx',
+            }
+            with patch.dict('os.environ', env, clear=True):
+                provider = SearchFactory.from_env(strict_mode=False)
+            
+            # Should have fallen back to simulated
+            self.assertEqual(provider, mock_simulated)
+
+    def test_strict_mode_raises_on_search_error(self):
+        """Verify strict mode raises SearchError on init failure."""
+        with patch('HDRP.tools.search.factory.SearchFactory.get_provider') as mock_get:
+            mock_get.side_effect = SearchError("Init failed")
+            
+            env = {
+                'HDRP_SEARCH_PROVIDER': 'google',
+                'GOOGLE_API_KEY': 'test-key',
+                'GOOGLE_CX': 'test-cx',
+            }
+            with patch.dict('os.environ', env, clear=True):
+                with self.assertRaises(SearchError):
+                    SearchFactory.from_env(strict_mode=True)
+
+    def test_fallback_on_unexpected_exception(self):
+        """Verify fallback on unexpected exceptions."""
+        with patch('HDRP.tools.search.factory.SearchFactory.get_provider') as mock_get:
+            # First call raises unexpected exception
+            mock_simulated = MagicMock()
+            mock_simulated.health_check.return_value = True
+            
+            mock_get.side_effect = [RuntimeError("Unexpected"), mock_simulated]
+            
+            env = {
+                'HDRP_SEARCH_PROVIDER': 'google',
+                'GOOGLE_API_KEY': 'test-key',
+                'GOOGLE_CX': 'test-cx',
+            }
+            with patch.dict('os.environ', env, clear=True):
+                provider = SearchFactory.from_env(strict_mode=False)
+            
+            # Should have fallen back to simulated
+            self.assertEqual(provider, mock_simulated)
+
+    def test_default_provider_arg(self):
+        """Verify default_provider argument is used when env var not set."""
+        # Clear env vars
+        with patch.dict('os.environ', {}, clear=True):
+            provider = SearchFactory.from_env(default_provider='simulated')
+        
+        self.assertTrue(provider.health_check())
+
+
+class TestSearchProviderHealthCheck(unittest.TestCase):
+    """Tests for provider health check behavior."""
+
+    def test_simulated_always_healthy(self):
+        """Verify simulated provider always returns healthy."""
+        provider = SearchFactory.get_provider("simulated")
+        self.assertTrue(provider.health_check())
+
+    @patch("HDRP.tools.search.google.request.urlopen")
+    def test_google_health_check_success(self, mock_urlopen):
+        """Verify Google health check succeeds with valid response."""
+        from HDRP.tools.search import GoogleSearchProvider
+        
+        # Mock a successful but empty search response
+        mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_resp.getcode.return_value = 200
+        mock_resp.read.return_value = json.dumps({"items": []}).encode("utf-8")
+        mock_urlopen.return_value = mock_resp
+        
+        provider = GoogleSearchProvider(
+            api_key="test-key",
+            cx="test-cx",
+            validate_key=False,
+        )
+        
+        # Should be able to make a search (health check)
+        response = provider.search("test")
+        self.assertEqual(len(response.results), 0)
+
+    @patch("HDRP.tools.search.google.request.urlopen")
+    def test_google_health_check_failure_on_error(self, mock_urlopen):
+        """Verify Google search fails on HTTP error."""
+        from HDRP.tools.search import GoogleSearchProvider
+        from urllib import error as urlerror
+        
+        mock_urlopen.side_effect = urlerror.HTTPError(
+            url="https://googleapis.com",
+            code=401,
+            msg="Unauthorized",
+            hdrs=None,
+            fp=None,
+        )
+        
+        provider = GoogleSearchProvider(
+            api_key="invalid-key",
+            cx="test-cx",
+            validate_key=False,
+        )
+        
+        with self.assertRaises(SearchError):
+            provider.search("test")
+
+
 if __name__ == '__main__':
     unittest.main()
