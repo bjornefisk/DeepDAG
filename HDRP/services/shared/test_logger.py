@@ -228,6 +228,8 @@ class TestResearchLogger(unittest.TestCase):
         """Verify log() passes payload correctly."""
         mock_handler = MagicMock()
         mock_handler.level = logging.INFO
+        # Configure handle() to call emit() like a real Handler
+        mock_handler.handle.side_effect = lambda record: mock_handler.emit(record) if record.levelno >= mock_handler.level else None
         mock_file_handler.return_value = mock_handler
         mock_stream_handler.return_value = MagicMock(level=logging.INFO)
         

@@ -63,8 +63,14 @@ class ResearchLogger:
             "payload": payload
         }
         
+        # #region agent log
+        import json;open('/mnt/d/Desktop/deepdag/.cursor/debug.log','a').write(json.dumps({"location":"logger.py:67","message":"log() called","data":{"event":event,"has_handlers":len(self.logger.handlers),"logger_level":self.logger.level},"timestamp":__import__('datetime').datetime.now().timestamp()*1000,"sessionId":"debug-session","hypothesisId":"H7"})+'\n')
+        # #endregion
+        
         # We pass 'event' as the message, but the formatter uses the 'event' attribute
-        self.logger.info(event, extra=extra)
+        # Ensure logger is enabled and has proper level set
+        if self.logger.isEnabledFor(logging.INFO):
+            self.logger.info(event, extra=extra)
         
         # Flush all handlers immediately for real-time access
         for handler in self.logger.handlers:

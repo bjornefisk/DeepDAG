@@ -23,6 +23,9 @@ class CriticService:
            problem for complex queries (e.g. "RSA" details are relevant to "Cryptography"
            if "RSA" was established as a subtopic).
         """
+        # #region agent log
+        import json;open('/mnt/d/Desktop/deepdag/.cursor/debug.log','a').write(json.dumps({"location":"service.py:16","message":"verify() entry","data":{"task":task,"num_claims":len(claims)},"timestamp":__import__('datetime').datetime.now().timestamp()*1000,"sessionId":"debug-session","hypothesisId":"H1"})+'\n')
+        # #endregion
         results = []
         
         STOP_WORDS = {
@@ -123,9 +126,37 @@ class CriticService:
                 claim_type = self._detect_claim_type(claim.statement)
                 threshold = 0.5 if claim_type == "speculative" else 0.6
                 
+                # #region agent log
+                import json;open('/mnt/d/Desktop/deepdag/.cursor/debug.log','a').write(json.dumps({"location":"service.py:126","message":"grounding check","data":{"overlap":overlap,"filtered_tokens_len":len(filtered_tokens),"threshold":threshold,"claim_type":claim_type,"overlap_ratio":overlap/len(filtered_tokens) if len(filtered_tokens) > 0 else 0},"timestamp":__import__('datetime').datetime.now().timestamp()*1000,"sessionId":"debug-session","hypothesisId":"H5"})+'\n')
+                # #endregion
+                
                 if len(filtered_tokens) > 0 and (overlap / len(filtered_tokens)) < threshold:
-                    rejection_reason = f"REJECTED: Insufficient overlap with source (type: {claim_type})"
+                    rejection_reason = f"REJECTED: Low grounding"
 
+            # Inference indicator check: reject if statement has inference words not in support
+            if not rejection_reason:
+                inference_indicators = [
+                    "because", "therefore", "thus", "hence", "consequently", 
+                    "as a result", "leads to", "causes", "due to", "results in"
+                ]
+                for indicator in inference_indicators:
+                    if indicator in lower_statement and indicator not in lower_support:
+                        rejection_reason = f"REJECTED: Inference indicator '{indicator}' not supported by source"
+                        break
+            
+            # Embellishment check: detect quantifiers/qualifiers added to claims
+            if not rejection_reason:
+                embellishments = [
+                    ("for all", "for"), ("all its", "its"), ("every", ""),
+                    ("always", ""), ("never", ""), ("completely", ""),
+                    ("entirely", ""), ("absolutely", "")
+                ]
+                for embellished, base in embellishments:
+                    if embellished in lower_statement and embellished not in lower_support:
+                        # Check if even the base form conveys same meaning
+                        rejection_reason = f"REJECTED: Embellishment '{embellished}' not in source"
+                        break
+            
             # Paraphrase tolerance: 70% key term overlap (skips verbatim check)
             if not rejection_reason:
                 if claim.statement not in claim.support_text:
@@ -148,6 +179,10 @@ class CriticService:
                 
                 if claim_tokens:
                     entailment_score = len(relevance_overlap) / len(claim_tokens)
+                
+                # #region agent log
+                import json;open('/mnt/d/Desktop/deepdag/.cursor/debug.log','a').write(json.dumps({"location":"service.py:150","message":"relevance score","data":{"entailment_score":entailment_score,"claim_tokens":list(claim_tokens),"task_tokens":list(task_tokens),"relevance_overlap":list(relevance_overlap)},"timestamp":__import__('datetime').datetime.now().timestamp()*1000,"sessionId":"debug-session","hypothesisId":"H1"})+'\n')
+                # #endregion
                 
                 # Semantic boost check
                 if not relevance_overlap:
@@ -181,9 +216,13 @@ class CriticService:
             reason = c["reason"]
             score = c["score"]
             
+            # #region agent log
+            import json;open('/mnt/d/Desktop/deepdag/.cursor/debug.log','a').write(json.dumps({"location":"service.py:179","message":"pass2 evaluation","data":{"claim_id":claim.claim_id,"score":score,"has_reason":bool(reason),"threshold_check":score < 0.1},"timestamp":__import__('datetime').datetime.now().timestamp()*1000,"sessionId":"debug-session","hypothesisId":"H1"})+'\n')
+            # #endregion
+            
             if not reason:
                 # If relevance is low, try to rescue via subtopics
-                if score < 0.1: # Threshold for "low/no relevance"
+                if score < 0.1: # Threshold for "low/no relevance" - catches truly irrelevant claims
                     # Check if claim mentions any verified subtopic
                     claim_text = (claim.statement + " " + claim.support_text).lower()
                     
@@ -198,14 +237,19 @@ class CriticService:
                             "subtopic_match": "true"
                         })
                     else:
-                        # Fallback to rank-based check
-                         if claim.source_rank and claim.source_rank > 2:
-                            reason = "REJECTED: Not relevant (low rank, no keyword overlap)"
+                        # Reject low-relevance claims that can't be bridged via subtopics
+                        reason = "REJECTED: Not relevant to task"
             
             if reason:
+                # #region agent log
+                import json;open('/mnt/d/Desktop/deepdag/.cursor/debug.log','a').write(json.dumps({"location":"service.py:206","message":"logging rejection","data":{"claim_id":claim.claim_id,"reason":reason,"has_source_url":hasattr(claim,'source_url'),"source_url_val":getattr(claim,'source_url',None)},"timestamp":__import__('datetime').datetime.now().timestamp()*1000,"sessionId":"debug-session","hypothesisId":"H6"})+'\n')
+                # #endregion
                 self.logger.log("claim_rejected", {
-                    "claim_id": claim.claim_id, "reason": reason,
-                    "statement": claim.statement[:50] + "..."
+                    "claim_id": claim.claim_id, 
+                    "reason": reason,
+                    "statement": claim.statement if len(claim.statement) <= 50 else claim.statement[:50] + "...",
+                    "source_url": claim.source_url,
+                    "source_title": getattr(claim, 'source_title', None)
                 })
                 claim.confidence = 0.0
                 results.append(CritiqueResult(
@@ -267,15 +311,24 @@ class CriticService:
             "could happen", "remains to be", "awaits", "unclear"
         ]
         
-        # Factual indicators
+        # Factual indicators - expanded to catch more verbs
         factual_markers = [
             "is", "was", "are", "were", "has been", "have been", "does", "did",
             "evidence shows", "research confirms", "studies indicate", "proven",
-            "established", "documented", "identified", "discovered", "found"
+            "established", "documented", "identified", "discovered", "found",
+            "orbits", "contains", "comprises", "includes", "consists", "measures"
         ]
         
         speculative_count = sum(1 for m in speculative_markers if m in lower_stmt)
         factual_count = sum(1 for m in factual_markers if m in lower_stmt)
+        
+        # If no markers at all, assume factual (default for simple statements)
+        if speculative_count == 0 and factual_count == 0:
+            return "factual"
+        
+        # #region agent log
+        import json;open('/mnt/d/Desktop/deepdag/.cursor/debug.log','a').write(json.dumps({"location":"service.py:280","message":"claim type detection","data":{"statement":statement,"speculative_count":speculative_count,"factual_count":factual_count},"timestamp":__import__('datetime').datetime.now().timestamp()*1000,"sessionId":"debug-session","hypothesisId":"H4"})+'\n')
+        # #endregion
         
         if speculative_count > factual_count:
             return "speculative"
