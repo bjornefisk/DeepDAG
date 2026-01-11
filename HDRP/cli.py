@@ -10,6 +10,9 @@ providers (Google or simulated).
 
 import os
 import sys
+import json
+from pathlib import Path
+from datetime import datetime, timezone
 from typing import Optional
 
 import typer
@@ -27,6 +30,73 @@ from HDRP.services.shared.logger import ResearchLogger
 
 app = typer.Typer(help="HDRP research CLI")
 console = Console()
+
+# Path to artifacts directory
+ARTIFACTS_DIR = Path(__file__).parent / "artifacts"
+
+
+def _save_report_artifacts(run_id: str, query: str, report: str, claims: list, critique_results: list):
+    """
+    Save report and metadata to the artifacts directory for dashboard access.
+    
+    Args:
+        run_id: The run ID
+        query: The original query
+        report: The generated markdown report
+        claims: List of all extracted claims
+        critique_results: List of critique results
+    """
+    # Create run-specific directory
+    run_dir = ARTIFACTS_DIR / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save report.md
+    report_path = run_dir / "report.md"
+    report_path.write_text(report, encoding='utf-8')
+    
+    # Build metadata
+    verified_count = sum(1 for r in critique_results if r.is_valid)
+    
+    # Collect unique sources
+    sources_dict = {}
+    for claim in claims:
+        url = getattr(claim, 'source_url', None)
+        if url and url not in sources_dict:
+            sources_dict[url] = {
+                "url": url,
+                "title": getattr(claim, 'source_title', 'Unknown'),
+                "rank": len(sources_dict) + 1,
+                "claims": 1
+            }
+        elif url:
+            sources_dict[url]["claims"] += 1
+    
+    metadata = {
+        "bundle_info": {
+            "run_id": run_id,
+            "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "query": query,
+            "report_title": f"HDRP Research Report: {query}"
+        },
+        "statistics": {
+            "total_claims": len(claims),
+            "verified_claims": verified_count,
+            "rejected_claims": len(critique_results) - verified_count,
+            "unique_sources": len(sources_dict)
+        },
+        "sources": list(sources_dict.values()),
+        "provenance": {
+            "system": "HDRP",
+            "version": "1.0.0",
+            "pipeline": ["Researcher", "Critic", "Synthesizer"],
+            "verification_enabled": True
+        }
+    }
+    
+    # Save metadata.json
+    metadata_path = run_dir / "metadata.json"
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2)
 
 
 def _build_search_provider(
@@ -137,6 +207,15 @@ def _run_pipeline(
         ),
     }
     report = synthesizer.synthesize(critique_results, context=context)
+    
+    # 6. Save report artifacts to artifacts directory
+    try:
+        _save_report_artifacts(run_id, query, report, claims, critique_results)
+        if verbose:
+            console.print(f"[bold cyan][hdrp][/bold cyan] Artifacts saved to artifacts/{run_id}/")
+    except Exception as e:
+        if verbose:
+            console.print(f"[yellow][hdrp][/yellow] Warning: Failed to save artifacts: {e}")
 
     if output_path:
         try:
@@ -276,8 +355,7 @@ def run_query_programmatic(
         # Log the query immediately for dashboard visibility
         run_logger.log(
             "query_submitted",
-            {"query": query, "provider": provider},
-            level="info"
+            {"query": query, "provider": provider}
         )
 
         
@@ -344,6 +422,15 @@ def run_query_programmatic(
             ),
         }
         report = synthesizer.synthesize(critique_results, context=context)
+        
+        update_progress("Saving report artifacts", 90)
+        
+        # Save report and metadata to artifacts directory
+        try:
+            _save_report_artifacts(actual_run_id, query, report, claims, critique_results)
+        except Exception as e:
+            # Log but don't fail if artifact saving fails
+            run_logger.log("artifact_save_failed", {"error": str(e)})
         
         update_progress("Completed", 100)
         

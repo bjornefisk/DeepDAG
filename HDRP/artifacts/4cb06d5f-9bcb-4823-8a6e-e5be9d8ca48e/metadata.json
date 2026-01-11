@@ -1,0 +1,56 @@
+{
+  "bundle_info": {
+    "run_id": "4cb06d5f-9bcb-4823-8a6e-e5be9d8ca48e",
+    "generated_at": "2026-01-11T18:31:38.788073Z",
+    "query": "What are the latest tech trends since 2026 has started?",
+    "report_title": "HDRP Research Report: What are the latest tech trends since 2026 has started?"
+  },
+  "statistics": {
+    "total_claims": 5,
+    "verified_claims": 5,
+    "rejected_claims": 0,
+    "unique_sources": 5
+  },
+  "sources": [
+    {
+      "url": "https://example.com/search?q=What are the latest tech trends since 2026 has started?&id=0",
+      "title": "Result 1 for 'What are the latest tech trends since 2026 has started?'",
+      "rank": 1,
+      "claims": 1
+    },
+    {
+      "url": "https://test.org/search?q=What are the latest tech trends since 2026 has started?&id=1",
+      "title": "Result 2 for 'What are the latest tech trends since 2026 has started?'",
+      "rank": 2,
+      "claims": 1
+    },
+    {
+      "url": "https://sample.net/search?q=What are the latest tech trends since 2026 has started?&id=2",
+      "title": "Result 3 for 'What are the latest tech trends since 2026 has started?'",
+      "rank": 3,
+      "claims": 1
+    },
+    {
+      "url": "https://benchmark.io/search?q=What are the latest tech trends since 2026 has started?&id=3",
+      "title": "Result 4 for 'What are the latest tech trends since 2026 has started?'",
+      "rank": 4,
+      "claims": 1
+    },
+    {
+      "url": "https://mock.co/search?q=What are the latest tech trends since 2026 has started?&id=4",
+      "title": "Result 5 for 'What are the latest tech trends since 2026 has started?'",
+      "rank": 5,
+      "claims": 1
+    }
+  ],
+  "provenance": {
+    "system": "HDRP",
+    "version": "1.0.0",
+    "pipeline": [
+      "Researcher",
+      "Critic",
+      "Synthesizer"
+    ],
+    "verification_enabled": true
+  }
+}

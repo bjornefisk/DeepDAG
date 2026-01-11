@@ -1,0 +1,56 @@
+{
+  "bundle_info": {
+    "run_id": "3238cb1f-1c13-4a37-921a-de7a1deea78f",
+    "generated_at": "2026-01-11T18:29:42.242184Z",
+    "query": "Test query for artifacts",
+    "report_title": "HDRP Research Report: Test query for artifacts"
+  },
+  "statistics": {
+    "total_claims": 5,
+    "verified_claims": 5,
+    "rejected_claims": 0,
+    "unique_sources": 5
+  },
+  "sources": [
+    {
+      "url": "https://example.com/search?q=Test query for artifacts&id=0",
+      "title": "Result 1 for 'Test query for artifacts'",
+      "rank": 1,
+      "claims": 1
+    },
+    {
+      "url": "https://test.org/search?q=Test query for artifacts&id=1",
+      "title": "Result 2 for 'Test query for artifacts'",
+      "rank": 2,
+      "claims": 1
+    },
+    {
+      "url": "https://sample.net/search?q=Test query for artifacts&id=2",
+      "title": "Result 3 for 'Test query for artifacts'",
+      "rank": 3,
+      "claims": 1
+    },
+    {
+      "url": "https://benchmark.io/search?q=Test query for artifacts&id=3",
+      "title": "Result 4 for 'Test query for artifacts'",
+      "rank": 4,
+      "claims": 1
+    },
+    {
+      "url": "https://mock.co/search?q=Test query for artifacts&id=4",
+      "title": "Result 5 for 'Test query for artifacts'",
+      "rank": 5,
+      "claims": 1
+    }
+  ],
+  "provenance": {
+    "system": "HDRP",
+    "version": "1.0.0",
+    "pipeline": [
+      "Researcher",
+      "Critic",
+      "Synthesizer"
+    ],
+    "verification_enabled": true
+  }
+}
