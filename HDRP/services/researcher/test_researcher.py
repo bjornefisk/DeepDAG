@@ -4,7 +4,8 @@ from unittest.mock import Mock, MagicMock, patch
 
 from HDRP.services.researcher.service import ResearcherService
 from HDRP.tools.search.simulated import SimulatedSearchProvider
-from HDRP.tools.search.base import SearchError, SearchResponse, SearchResult
+from HDRP.tools.search.base import SearchError
+from HDRP.tools.search.schema import SearchResponse, SearchResult
 
 
 class TestResearcherService(unittest.TestCase):
@@ -50,7 +51,8 @@ class TestResearcherRetryLogic(unittest.TestCase):
             results=[SearchResult(
                 title="Test",
                 url="https://example.com",
-                snippet="Test snippet with enough content to be extracted."
+                snippet="Test snippet with enough content to be extracted.",
+                source="simulated"
             )],
             total_found=1,
             latency_ms=100,

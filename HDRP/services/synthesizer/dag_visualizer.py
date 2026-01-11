@@ -15,7 +15,7 @@ class DAGVisualizer:
     # Node type to shape mapping
     NODE_SHAPES = {
         'researcher': '[]',      # Rectangle
-        'critic': '{{}',         # Hexagon
+        'critic': '{{}}',        # Hexagon
         'synthesizer': '([{}])', # Stadium/pill
         'principal': '[()]',     # Rounded rectangle
         'root': '(())',          # Circle

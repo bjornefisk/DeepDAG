@@ -13,7 +13,7 @@ from rich.console import Console
 from HDRP.tools.eval.test_queries import (
     ALL_QUERIES,
     QueryComplexity,
-    TestQuery,
+    EvalQuery,
     get_queries_by_complexity,
 )
 from HDRP.tools.eval.react_agent import ReActAgent
@@ -47,7 +47,7 @@ class ComparisonRunner:
     
     def run_comparison(
         self,
-        queries: List[TestQuery],
+        queries: List[EvalQuery],
         trials: int = 1,
     ) -> AggregateComparison:
         """Run comparison on a list of queries.
@@ -78,7 +78,7 @@ class ComparisonRunner:
         
         return aggregate
     
-    def _run_single_comparison(self, query: TestQuery) -> ComparisonResult:
+    def _run_single_comparison(self, query: EvalQuery) -> ComparisonResult:
         """Run both HDRP and ReAct on a single query and compare."""
         # Generate run IDs with shared prefix for correlation
         import uuid

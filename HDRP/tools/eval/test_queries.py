@@ -19,7 +19,7 @@ class QueryComplexity(Enum):
 
 
 @dataclass
-class TestQuery:
+class EvalQuery:
     """A single test query with metadata."""
     
     id: str
@@ -34,21 +34,21 @@ class TestQuery:
 
 # Simple queries: Single-topic factual questions
 SIMPLE_QUERIES = [
-    TestQuery(
+    EvalQuery(
         id="simple_01",
         question="What is quantum computing?",
         complexity=QueryComplexity.SIMPLE,
         description="Single-concept definition query",
         expected_subtopics=["quantum computing", "qubits", "superposition"],
     ),
-    TestQuery(
+    EvalQuery(
         id="simple_02",
         question="Who invented the transistor?",
         complexity=QueryComplexity.SIMPLE,
         description="Historical fact with clear answer",
         expected_subtopics=["transistor", "inventors", "Bell Labs"],
     ),
-    TestQuery(
+    EvalQuery(
         id="simple_03",
         question="What is machine learning?",
         complexity=QueryComplexity.SIMPLE,
@@ -59,28 +59,28 @@ SIMPLE_QUERIES = [
 
 # Medium queries: Multi-faceted research requiring 2-3 subtopics
 MEDIUM_QUERIES = [
-    TestQuery(
+    EvalQuery(
         id="medium_01",
         question="Compare quantum computing to classical computing",
         complexity=QueryComplexity.MEDIUM,
         description="Comparison requiring analysis of two concepts",
         expected_subtopics=["quantum computing", "classical computing", "differences", "advantages"],
     ),
-    TestQuery(
+    EvalQuery(
         id="medium_02",
         question="What is the impact of AI on healthcare?",
         complexity=QueryComplexity.MEDIUM,
         description="Application domain analysis requiring multiple perspectives",
         expected_subtopics=["AI", "healthcare", "medical diagnosis", "applications"],
     ),
-    TestQuery(
+    EvalQuery(
         id="medium_03",
         question="How does blockchain technology ensure security?",
         complexity=QueryComplexity.MEDIUM,
         description="Technical mechanism explanation with multiple components",
         expected_subtopics=["blockchain", "security", "cryptography", "consensus"],
     ),
-    TestQuery(
+    EvalQuery(
         id="medium_04",
         question="What are the main challenges in developing autonomous vehicles?",
         complexity=QueryComplexity.MEDIUM,
@@ -91,7 +91,7 @@ MEDIUM_QUERIES = [
 
 # Complex queries: Multi-part research testing hierarchical decomposition
 COMPLEX_QUERIES = [
-    TestQuery(
+    EvalQuery(
         id="complex_01",
         question="Trace the evolution of cryptography from classical methods to quantum-resistant approaches",
         complexity=QueryComplexity.COMPLEX,
@@ -105,7 +105,7 @@ COMPLEX_QUERIES = [
             "lattice-based cryptography"
         ],
     ),
-    TestQuery(
+    EvalQuery(
         id="complex_02",
         question="Compare renewable energy adoption and policies across North America, Europe, and Asia",
         complexity=QueryComplexity.COMPLEX,
@@ -121,7 +121,7 @@ COMPLEX_QUERIES = [
             "wind"
         ],
     ),
-    TestQuery(
+    EvalQuery(
         id="complex_03",
         question="Analyze the technical and ethical implications of large language models in content generation",
         complexity=QueryComplexity.COMPLEX,
@@ -144,12 +144,12 @@ COMPLEX_QUERIES = [
 ALL_QUERIES = SIMPLE_QUERIES + MEDIUM_QUERIES + COMPLEX_QUERIES
 
 
-def get_queries_by_complexity(complexity: QueryComplexity) -> List[TestQuery]:
+def get_queries_by_complexity(complexity: QueryComplexity) -> List[EvalQuery]:
     """Filter queries by complexity level."""
     return [q for q in ALL_QUERIES if q.complexity == complexity]
 
 
-def get_query_by_id(query_id: str) -> TestQuery:
+def get_query_by_id(query_id: str) -> EvalQuery:
     """Retrieve a specific query by ID."""
     for query in ALL_QUERIES:
         if query.id == query_id:

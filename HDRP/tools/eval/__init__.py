@@ -11,7 +11,7 @@ This package contains:
 """
 
 from .react_agent import ReActAgent, ReActStep, ReActRunResult
-from .test_queries import TestQuery, QueryComplexity, ALL_QUERIES
+from .test_queries import EvalQuery, QueryComplexity, ALL_QUERIES
 from .metrics import (
     MetricsCollector,
     SystemMetrics,
@@ -25,7 +25,7 @@ __all__ = [
     "ReActAgent",
     "ReActStep",
     "ReActRunResult",
-    "TestQuery",
+    "EvalQuery",
     "QueryComplexity",
     "ALL_QUERIES",
     "MetricsCollector",

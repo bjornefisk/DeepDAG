@@ -67,8 +67,9 @@ class TestSearchTool(unittest.TestCase):
     def test_factory_google_provider(self):
         """Test that factory can instantiate Google provider."""
         # This will fail validation without API key, but should not raise NotImplementedError
-        with self.assertRaises(SearchError):
-            SearchFactory.get_provider("google")
+        with patch.dict('os.environ', {}, clear=True):
+            with self.assertRaises(SearchError):
+                SearchFactory.get_provider("google")
     
 
 

@@ -223,10 +223,13 @@ class TestResearchLogger(unittest.TestCase):
 
     @patch('HDRP.services.shared.logger.os.makedirs')
     @patch('HDRP.services.shared.logger.logging.FileHandler')
-    def test_log_with_payload(self, mock_file_handler, mock_makedirs):
+    @patch('HDRP.services.shared.logger.logging.StreamHandler')
+    def test_log_with_payload(self, mock_stream_handler, mock_file_handler, mock_makedirs):
         """Verify log() passes payload correctly."""
         mock_handler = MagicMock()
+        mock_handler.level = logging.INFO
         mock_file_handler.return_value = mock_handler
+        mock_stream_handler.return_value = MagicMock(level=logging.INFO)
         
         # Create a fresh logger
         logger_name = f"HDRP.test_log_payload_{id(self)}"
@@ -244,10 +247,13 @@ class TestResearchLogger(unittest.TestCase):
 
     @patch('HDRP.services.shared.logger.os.makedirs')
     @patch('HDRP.services.shared.logger.logging.FileHandler')
-    def test_log_with_none_payload(self, mock_file_handler, mock_makedirs):
+    @patch('HDRP.services.shared.logger.logging.StreamHandler')
+    def test_log_with_none_payload(self, mock_stream_handler, mock_file_handler, mock_makedirs):
         """Verify log() handles None payload gracefully."""
         mock_handler = MagicMock()
+        mock_handler.level = logging.INFO
         mock_file_handler.return_value = mock_handler
+        mock_stream_handler.return_value = MagicMock(level=logging.INFO)
         
         logger_name = f"HDRP.test_none_payload_{id(self)}"
         test_logger = logging.getLogger(logger_name)
