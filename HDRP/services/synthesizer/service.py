@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+from HDRP.services.synthesizer.report_formatter import DeepResearchReportFormatter
 
 class SynthesizerService:
     """Service responsible for composing the final research report.
@@ -12,126 +13,42 @@ class SynthesizerService:
     ensuring every fact is properly cited with its source URL.
     """
     
-    def synthesize(self, verification_results: List[CritiqueResult], context: dict = None) -> str:
-        """Converts a list of verification results into a markdown report with citations.
+    def __init__(self):
+        self.formatter = DeepResearchReportFormatter()
+    
+    def synthesize(self, verification_results: List[CritiqueResult], context: dict = None, graph_data: dict = None, run_id: str = None) -> str:
+        """Converts a list of verification results into a Deep Research Report.
         
         Args:
-            verification_results: List of verified claims.
+            verification_results: List of all verification results (verified and rejected).
             context: Optional dictionary for customization.
                      Keys:
                      - 'report_title': (str) Title of the report.
                      - 'section_headers': (dict) Map of node_id to section title.
-                     - 'introduction': (str) Optional intro text.
+                     - 'query': (str) Original research query.
+            graph_data: Optional DAG structure with nodes and edges.
+            run_id: Optional run identifier.
         
-        Only claims marked as valid (is_valid=True) are included in the report.
-        Claims are grouped by their source DAG node ID if available.
+        Returns:
+            Formatted markdown report following Deep Research Report Skeleton structure.
         """
         if context is None:
             context = {}
-
-        report_title = context.get("report_title", "Research Report")
-        section_headers = context.get("section_headers", {})
-        introduction = context.get("introduction", "")
-
-        # Enforce verification invariant: reject unverified claims
-        verified_claims = [res.claim for res in verification_results if res.is_valid]
         
-        if not verified_claims:
-            return "No verified information found."
+        if run_id is None:
+            run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         
-        # Collect traceability metadata for report
-        timestamps = [c.extracted_at for c in verified_claims if c.extracted_at]
-        earliest = min(timestamps) if timestamps else None
-        latest = max(timestamps) if timestamps else None
-            
-        report = f"# {report_title}\n\n"
+        query = context.get("query", "")
         
-        # Add metadata section with traceability info
-        report += "## Research Metadata\n\n"
-        report += f"- **Total Verified Claims**: {len(verified_claims)}\n"
-        if earliest and latest:
-            report += f"- **Research Period**: {earliest} to {latest}\n"
-        unique_sources_count = len(set(c.source_url for c in verified_claims if c.source_url))
-        report += f"- **Unique Sources**: {unique_sources_count}\n"
-        report += f"- **Generated**: {datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')}\n\n"
+        # Use new formatter to generate the report
+        report = self.formatter.format_full_report(
+            verification_results=verification_results,
+            graph_data=graph_data,
+            context=context,
+            run_id=run_id,
+            query=query
+        )
         
-        if introduction:
-            report += f"{introduction}\n\n"
-        
-        # Build global citation index (source_url -> citation number)
-        # Also build a source details map for richer bibliography
-        citation_map = {}
-        source_details = {}  # url -> {title, rank, claim_count}
-        
-        for claim in verified_claims:
-            if claim.source_url:
-                if claim.source_url not in source_details:
-                    source_details[claim.source_url] = {
-                        'title': claim.source_title or "Untitled Source",
-                        'rank': claim.source_rank,
-                        'count': 0
-                    }
-                source_details[claim.source_url]['count'] += 1
-        
-        unique_sources = sorted(list(source_details.keys()))
-        for idx, source_url in enumerate(unique_sources, 1):
-            citation_map[source_url] = idx
-        
-        # Group claims by DAG node for sectioning
-        grouped_claims = {}
-        for claim in verified_claims:
-            node_id = claim.source_node_id or "General Findings"
-            if node_id not in grouped_claims:
-                grouped_claims[node_id] = []
-            grouped_claims[node_id].append(claim)
-            
-        sorted_nodes = sorted(grouped_claims.keys())
-        
-        # Generate TOC for multi-section reports
-        if len(sorted_nodes) > 1:
-            report += "## Table of Contents\n\n"
-            for node_id in sorted_nodes:
-                header = section_headers.get(node_id, f"Node: {node_id}" if node_id != "General Findings" else "General Findings")
-                # Generate markdown anchor (lowercase, normalize punctuation)
-                anchor = header.lower().replace(" ", "-").replace(":", "")
-                report += f"- [{header}](#{anchor})\n"
-            report += "\n"
-
-        for node_id in sorted_nodes:
-            if node_id == "General Findings":
-                section_title = "General Findings"
-            else:
-                section_title = section_headers.get(node_id, f"Node: {node_id}")
-                
-            report += f"## {section_title}\n\n"
-            
-            for i, claim in enumerate(grouped_claims[node_id], 1):
-                # Embed inline citation number with preserved source link
-                citation_num = citation_map.get(claim.source_url, "")
-                report += f"{i}. {claim.statement} [{citation_num}]\n"
-                
-                # Add support text as an indented quote for transparency
-                if claim.support_text and claim.support_text != claim.statement:
-                    # Truncate very long support text
-                    support_display = claim.support_text if len(claim.support_text) <= 150 else claim.support_text[:147] + "..."
-                    report += f"   > *\"{support_display}\"*\n"
-                report += "\n"
-        
-        report += "## Bibliography\n\n"
-        for source in unique_sources:
-            num = citation_map[source]
-            details = source_details[source]
-            title = details['title']
-            rank = details['rank']
-            claim_count = details['count']
-            
-            # Format: [1] Title - URL (Search rank: 1, Claims: 3)
-            report += f"[{num}] **{title}**\n"
-            report += f"    {source}\n"
-            if rank:
-                report += f"    *Search rank: {rank}, Claims sourced: {claim_count}*\n"
-            report += "\n"
-            
         return report
     
     def create_artifact_bundle(
@@ -178,53 +95,33 @@ class SynthesizerService:
         # Extract verified claims
         verified_claims = [res.claim for res in verification_results if res.is_valid]
         
-        # 1. Generate base technical report
-        base_report = self.synthesize(verification_results, context)
+        # Add query to context for report generation
+        if query and 'query' not in context:
+            context['query'] = query
         
-        # 2. Apply humanization
-        humanizer = ReportHumanizer()
-        humanized_report = humanizer.humanize_full_report(
-            base_report=base_report,
-            claims=verified_claims,
-            topic=query,
-            context=context
-        )
-        
-        # 3. Generate DAG visualization
-        visualizer = DAGVisualizer()
-        dag_section = visualizer.generate_with_metadata(
+        # 1. Generate report with new Deep Research Report format
+        # The new format already includes executive synthesis, evidence traceability,
+        # DAG execution summary, and bibliography - no additional humanization needed
+        final_report = self.synthesize(
+            verification_results=verification_results,
+            context=context,
             graph_data=graph_data,
-            claims=verified_claims,
-            metadata=context
+            run_id=run_id
         )
         
-        # 4. Combine into final report with DAG
-        final_report = humanized_report
-        
-        # Insert DAG visualization before conclusions
-        if "## Conclusions" in final_report:
-            parts = final_report.split("## Conclusions")
-            final_report = parts[0] + "\n" + dag_section + "\n## Conclusions" + parts[1]
-        else:
-            # Add at end before bibliography
-            if "## Bibliography" in final_report:
-                parts = final_report.split("## Bibliography")
-                final_report = parts[0] + "\n" + dag_section + "\n## Bibliography" + parts[1]
-            else:
-                final_report += "\n" + dag_section
-        
-        # 5. Generate metadata
+        # 2. Generate metadata
         metadata = self._generate_metadata(
             verification_results=verification_results,
             run_id=run_id,
             query=query,
-            context=context
+            context=context,
+            graph_data=graph_data
         )
         
-        # 6. Write all files
+        # 3. Write all files
         output_files = {}
         
-        # Write humanized report
+        # Write final report
         report_path = artifact_dir / "report.md"
         report_path.write_text(final_report, encoding='utf-8')
         output_files['report'] = str(report_path)
@@ -275,7 +172,8 @@ class SynthesizerService:
         verification_results: List[CritiqueResult],
         run_id: str,
         query: str,
-        context: dict
+        context: dict,
+        graph_data: Optional[Dict] = None
     ) -> Dict:
         """Generate comprehensive metadata for the artifact bundle.
         
@@ -312,12 +210,35 @@ class SynthesizerService:
             node_id = claim.source_node_id or 'unknown'
             node_stats[node_id] = node_stats.get(node_id, 0) + 1
         
+        # DAG statistics
+        dag_stats = {}
+        if graph_data and 'nodes' in graph_data:
+            nodes = graph_data['nodes']
+            edges = graph_data.get('edges', [])
+            
+            # Count nodes by type
+            total_nodes = len(nodes)
+            nodes_with_outgoing = set(edge['from'] for edge in edges)
+            leaf_nodes = [n for n in nodes if n['id'] not in nodes_with_outgoing and n.get('type') == 'researcher']
+            
+            dag_stats = {
+                'total_nodes': total_nodes,
+                'leaf_research_nodes': len(leaf_nodes),
+                'dynamic_expansions': len(nodes_with_outgoing),
+                'node_types': {}
+            }
+            
+            # Count by type
+            for node in nodes:
+                node_type = node.get('type', 'unknown')
+                dag_stats['node_types'][node_type] = dag_stats['node_types'].get(node_type, 0) + 1
+        
         metadata = {
             'bundle_info': {
                 'run_id': run_id,
                 'generated_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
                 'query': query,
-                'report_title': context.get('report_title', 'Research Report')
+                'report_title': context.get('report_title', 'Deep Research Report')
             },
             'statistics': {
                 'total_claims': len(verification_results),
@@ -330,6 +251,7 @@ class SynthesizerService:
                     'end': latest
                 }
             },
+            'dag_statistics': dag_stats,
             'sources': [
                 {
                     'url': url,

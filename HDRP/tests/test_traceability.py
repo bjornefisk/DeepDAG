@@ -147,7 +147,7 @@ class TestClaimTraceability(unittest.TestCase):
                              "Verified claims should have increased confidence")
     
     def test_synthesizer_includes_metadata_section(self):
-        """Synthesizer should include a traceability metadata section."""
+        """Synthesizer should include Deep Research Report structure."""
         claim = AtomicClaim(
             statement="Quantum entanglement enables quantum teleportation.",
             support_text="Quantum entanglement enables quantum teleportation.",
@@ -158,13 +158,18 @@ class TestClaimTraceability(unittest.TestCase):
             extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         )
         
-        result = CritiqueResult(claim=claim, is_valid=True, reason="Verified")
-        report = self.synthesizer.synthesize([result])
+        result = CritiqueResult(claim=claim, is_valid=True, reason="Verified", entailment_score=0.95)
+        report = self.synthesizer.synthesize([result], context={"query": "quantum computing"}, run_id="test-123")
         
-        self.assertIn("Research Metadata", report, "Should include metadata section")
-        self.assertIn("Total Verified Claims", report)
-        self.assertIn("Unique Sources", report)
-        self.assertIn("Generated", report)
+        # Verify new report structure sections
+        self.assertIn("HDRP Deep Research Report", report, "Should include report header")
+        self.assertIn("1. Executive Synthesis", report, "Should include Executive Synthesis section")
+        self.assertIn("2. Verified Findings", report, "Should include Verified Findings section")
+        self.assertIn("3. Evidence & Traceability", report, "Should include Evidence & Traceability section")
+        self.assertIn("4. DAG Execution Summary", report, "Should include DAG Execution Summary section")
+        self.assertIn("5. Bibliography", report, "Should include Bibliography section")
+        self.assertIn("Run ID", report, "Should include run ID")
+        self.assertIn("Generated", report, "Should include generation timestamp")
     
     def test_synthesizer_bibliography_includes_titles(self):
         """Bibliography should show source titles, not just URLs."""
@@ -178,10 +183,10 @@ class TestClaimTraceability(unittest.TestCase):
             extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         )
         
-        result = CritiqueResult(claim=claim, is_valid=True, reason="Verified")
-        report = self.synthesizer.synthesize([result])
+        result = CritiqueResult(claim=claim, is_valid=True, reason="Verified", entailment_score=0.90)
+        report = self.synthesizer.synthesize([result], context={"query": "machine learning"}, run_id="test-ml")
         
-        self.assertIn("Bibliography", report)
+        self.assertIn("5. Bibliography", report)
         self.assertIn("Machine Learning Fundamentals", report,
                      "Bibliography should include source title")
         self.assertIn("https://example.com/ml", report,
@@ -199,8 +204,8 @@ class TestClaimTraceability(unittest.TestCase):
             extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         )
         
-        result = CritiqueResult(claim=claim, is_valid=True, reason="Verified")
-        report = self.synthesizer.synthesize([result])
+        result = CritiqueResult(claim=claim, is_valid=True, reason="Verified", entailment_score=0.92)
+        report = self.synthesizer.synthesize([result], context={"query": "neural networks"}, run_id="test-nn")
         
         self.assertIn("Search rank: 3", report,
                      "Bibliography should show search rank")
@@ -232,11 +237,13 @@ class TestClaimTraceability(unittest.TestCase):
             self.assertIsNotNone(claim.source_rank, "Rank lost in critic stage")
         
         # Step 3: Synthesizer
-        report = self.synthesizer.synthesize(critique_results)
+        report = self.synthesizer.synthesize(critique_results, context={"query": query}, run_id="test-e2e")
         
-        # Report should contain traceability information
-        self.assertIn("Research Metadata", report)
-        self.assertIn("Bibliography", report)
+        # Report should contain new Deep Research Report structure
+        self.assertIn("HDRP Deep Research Report", report)
+        self.assertIn("1. Executive Synthesis", report)
+        self.assertIn("3. Evidence & Traceability", report)
+        self.assertIn("5. Bibliography", report)
         
         # Should show at least one source title
         source_titles = [c.source_title for c in verified_claims if c.source_title]
@@ -261,9 +268,75 @@ class TestClaimTraceability(unittest.TestCase):
         self.assertEqual(len(results), 1)
         
         # Should synthesize successfully
-        report = self.synthesizer.synthesize(results)
+        report = self.synthesizer.synthesize(results, context={"query": "minimal test"}, run_id="test-minimal")
         self.assertIsInstance(report, str)
         self.assertGreater(len(report), 0)
+    
+    def test_verification_hash_generation(self):
+        """Test that verification hashes are generated correctly."""
+        claim = AtomicClaim(
+            statement="Test claim for hash generation.",
+            support_text="Test claim for hash generation.",
+            source_url="https://example.com/test",
+            source_title="Test Source",
+            confidence=0.8,
+            extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        )
+        
+        result = CritiqueResult(claim=claim, is_valid=True, reason="Verified", entailment_score=0.85)
+        report = self.synthesizer.synthesize([result], context={"query": "test"}, run_id="test-hash")
+        
+        # Should include verification hash in Evidence & Traceability section
+        self.assertIn("Verification Hash", report, "Should include verification hash")
+        self.assertIn("3. Evidence & Traceability", report)
+    
+    def test_confidence_level_mapping(self):
+        """Test that confidence levels are correctly mapped to High/Medium/Low."""
+        high_conf_claim = AtomicClaim(
+            statement="High confidence claim.",
+            support_text="High confidence claim.",
+            source_url="https://example.com/high",
+            confidence=0.9,
+            extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        )
+        
+        result = CritiqueResult(claim=high_conf_claim, is_valid=True, reason="Verified", entailment_score=0.95)
+        report = self.synthesizer.synthesize([result], context={"query": "test"}, run_id="test-conf")
+        
+        # Should show High confidence in Verified Findings section
+        self.assertIn("2. Verified Findings", report)
+        self.assertIn("Confidence: High", report, "Should map high scores to 'High' confidence")
+    
+    def test_rejected_claims_in_separate_section(self):
+        """Test that rejected claims appear in a separate subsection."""
+        verified_claim = AtomicClaim(
+            statement="This claim is verified.",
+            support_text="This claim is verified.",
+            source_url="https://example.com/verified",
+            confidence=0.8,
+            extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        )
+        
+        rejected_claim = AtomicClaim(
+            statement="This claim is rejected.",
+            support_text="This claim is rejected.",
+            source_url="https://example.com/rejected",
+            confidence=0.5,
+            extracted_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        )
+        
+        results = [
+            CritiqueResult(claim=verified_claim, is_valid=True, reason="Verified", entailment_score=0.85),
+            CritiqueResult(claim=rejected_claim, is_valid=False, reason="Insufficient evidence", entailment_score=0.3)
+        ]
+        
+        report = self.synthesizer.synthesize(results, context={"query": "test"}, run_id="test-rejected")
+        
+        # Should have both verified and rejected sections
+        self.assertIn("Verified Claims Evidence", report)
+        self.assertIn("Rejected Claims", report)
+        self.assertIn("✔ Entails", report)
+        self.assertIn("✖ Rejected", report)
 
 
 if __name__ == "__main__":

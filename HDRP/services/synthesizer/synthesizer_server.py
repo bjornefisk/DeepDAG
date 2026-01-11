@@ -62,14 +62,17 @@ class SynthesizerServicer(hdrp_services_pb2_grpc.SynthesizerServiceServicer):
                 result = CritiqueResult(
                     claim=claim,
                     is_valid=pb_result.is_valid,
-                    reasoning=pb_result.reasoning
+                    reason=pb_result.reasoning,
+                    entailment_score=getattr(pb_result, 'entailment_score', 0.0)
                 )
                 critique_results.append(result)
             
-            # Synthesize report
+            # Synthesize report with new parameters
             report = self.synthesizer.synthesize(
                 verification_results=critique_results,
-                context=ctx
+                context=ctx,
+                graph_data=None,  # Could be passed from request if available
+                run_id=run_id
             )
             
             logger.info(f"Synthesis completed: report length={len(report)} chars")
