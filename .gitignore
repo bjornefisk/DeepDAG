@@ -134,3 +134,30 @@ Thumbs.db
 logs/
 *.jsonl
 !web-ui/src/lib/
+
+# HDRP Artifacts - ignore generated files but keep folder structure
+HDRP/artifacts/*
+!HDRP/artifacts/.gitkeep
+!HDRP/artifacts/README.md
+
+# HDRP Logs
+HDRP/logs/*
+!HDRP/logs/.gitkeep
+
+# Go Orchestrator Binaries
+HDRP/orchestrator/server
+HDRP/orchestrator/planner
+HDRP/orchestrator/cmd/server/server
+HDRP/orchestrator/cmd/planner/planner
+
+# Root-level cache and temp files
+/.pytest_cache/
+/.cursor/
+
+# Virtual environment (local dev)
+/venv/
+
+# Editor-specific (if not already covered)
+*.swp
+*.swo
+*~
