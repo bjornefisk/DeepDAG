@@ -2,16 +2,66 @@ syntax = "proto3";
 
 package hdrp;
 
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
 option go_package = "github.com/deepdag/hdrp/api/gen";
 
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "HDRP Orchestrator API";
+    version: "1.0";
+    description: "Hierarchical Deep Research Pipeline - Orchestrator Service";
+  };
+  schemes: HTTP;
+  schemes: HTTPS;
+  consumes: "application/json";
+  produces: "application/json";
+};
+
 service HDRPService {
-  rpc ParseQuery (ParseQueryRequest) returns (ParseQueryResponse);
-  rpc ExecuteGraph (Graph) returns (GraphExecutionResult);
-  rpc ValidateGraph (Graph) returns (ValidationResult);
+  rpc ParseQuery (ParseQueryRequest) returns (ParseQueryResponse) {
+    option (google.api.http) = {
+      post: "/v1/parse"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Parse Query";
+      description: "Parses a research query into an objective with intent and constraints";
+      tags: "Orchestrator";
+    };
+  }
+  rpc ExecuteGraph (Graph) returns (GraphExecutionResult) {
+    option (google.api.http) = {
+      post: "/v1/execute"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Execute DAG";
+      description: "Executes a research DAG and returns the result";
+      tags: "Orchestrator";
+    };
+  }
+  rpc ValidateGraph (Graph) returns (ValidationResult) {
+    option (google.api.http) = {
+      post: "/v1/validate"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Validate DAG";
+      description: "Validates a DAG structure for cycles and correctness";
+      tags: "Orchestrator";
+    };
+  }
 }
 
 message ParseQueryRequest {
-  string query = 1;
+  string query = 1 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 500,
+    (buf.validate.field).required = true
+  ];
   map<string, string> context = 2;
 }
 
@@ -20,7 +70,7 @@ message ParseQueryResponse {
 }
 
 message Objective {
-  string id = 1;
+  string id = 1 [(buf.validate.field).string.min_len = 1];
   string description = 2;
   string intent_type = 3; // e.g., "RESEARCH", "CODE_GEN", "ANALYSIS"
   repeated string constraints = 4;
@@ -28,22 +78,25 @@ message Objective {
 }
 
 message Graph {
-  string id = 1;
-  repeated Node nodes = 2;
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+  repeated Node nodes = 2 [(buf.validate.field).repeated.min_items = 1];
   repeated Edge edges = 3;
   map<string, string> metadata = 4;
 }
 
 message Node {
-  string id = 1;
+  string id = 1 [(buf.validate.field).string.min_len = 1];
   string type = 2; // e.g., "researcher", "synthesizer", "critic"
   map<string, string> config = 3;
-  double relevance_score = 4; // 0.0 to 1.0 indicating importance or confidence
+  double relevance_score = 4 [
+    (buf.validate.field).double.gte = 0.0,
+    (buf.validate.field).double.lte = 1.0
+  ]; // 0.0 to 1.0 indicating importance or confidence
 }
 
 message Edge {
-  string from = 1;
-  string to = 2;
+  string from = 1 [(buf.validate.field).string.min_len = 1];
+  string to = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message GraphExecutionResult {

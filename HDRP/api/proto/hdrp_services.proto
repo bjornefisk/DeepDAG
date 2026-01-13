@@ -2,20 +2,53 @@ syntax = "proto3";
 
 package hdrp.services;
 
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
 option go_package = "github.com/deepdag/hdrp/api/gen/services";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "HDRP Services API";
+    version: "1.0";
+    description: "Hierarchical Deep Research Pipeline - Microservices API";
+  };
+  schemes: HTTP;
+  schemes: HTTPS;
+  consumes: "application/json";
+  produces: "application/json";
+};
 
 // ============================================================================
 // Principal Service: Query Decomposition
 // ============================================================================
 
 service PrincipalService {
-  rpc DecomposeQuery (QueryRequest) returns (DecompositionResponse);
+  rpc DecomposeQuery (QueryRequest) returns (DecompositionResponse) {
+    option (google.api.http) = {
+      post: "/v1/decompose"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Decompose Query into DAG";
+      description: "Breaks down a research query into a Directed Acyclic Graph of subtasks";
+      tags: "Principal";
+    };
+  }
 }
 
 message QueryRequest {
-  string query = 1;
+  string query = 1 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 500,
+    (buf.validate.field).required = true
+  ];
   map<string, string> context = 2;
-  string run_id = 3;
+  string run_id = 3 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).required = true
+  ];
 }
 
 message DecompositionResponse {
@@ -49,13 +82,33 @@ message Edge {
 // ============================================================================
 
 service ResearcherService {
-  rpc Research (ResearchRequest) returns (ResearchResponse);
+  rpc Research (ResearchRequest) returns (ResearchResponse) {
+    option (google.api.http) = {
+      post: "/v1/research"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Conduct Research";
+      description: "Extracts atomic claims from sources for a given query";
+      tags: "Researcher";
+    };
+  }
 }
 
 message ResearchRequest {
-  string query = 1;
-  string source_node_id = 2;
-  string run_id = 3;
+  string query = 1 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 500,
+    (buf.validate.field).required = true
+  ];
+  string source_node_id = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).required = true
+  ];
+  string run_id = 3 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).required = true
+  ];
   map<string, string> config = 4;
 }
 
@@ -65,13 +118,13 @@ message ResearchResponse {
 }
 
 message AtomicClaim {
-  string statement = 1;
+  string statement = 1 [(buf.validate.field).string.min_len = 1];
   string source_url = 2;
   string support_text = 3;
-  string source_node_id = 4;
+  string source_node_id = 4 [(buf.validate.field).string.min_len = 1];
   string timestamp = 5;
   string source_title = 6;
-  int32 source_rank = 7;
+  int32 source_rank = 7 [(buf.validate.field).int32.gte = 0];
 }
 
 // ============================================================================
@@ -79,13 +132,26 @@ message AtomicClaim {
 // ============================================================================
 
 service CriticService {
-  rpc Verify (VerifyRequest) returns (VerifyResponse);
+  rpc Verify (VerifyRequest) returns (VerifyResponse) {
+    option (google.api.http) = {
+      post: "/v1/verify"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Verify Claims";
+      description: "Validates and critiques atomic claims extracted from research";
+      tags: "Critic";
+    };
+  }
 }
 
 message VerifyRequest {
-  repeated AtomicClaim claims = 1;
-  string task = 2;
-  string run_id = 3;
+  repeated AtomicClaim claims = 1 [(buf.validate.field).repeated.min_items = 1];
+  string task = 2 [(buf.validate.field).string.min_len = 1];
+  string run_id = 3 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).required = true
+  ];
 }
 
 message VerifyResponse {
@@ -98,7 +164,10 @@ message CritiqueResult {
   AtomicClaim claim = 1;
   bool is_valid = 2;
   string reasoning = 3;
-  double confidence = 4;
+  double confidence = 4 [
+    (buf.validate.field).double.gte = 0.0,
+    (buf.validate.field).double.lte = 1.0
+  ];
 }
 
 // ============================================================================
@@ -106,13 +175,26 @@ message CritiqueResult {
 // ============================================================================
 
 service SynthesizerService {
-  rpc Synthesize (SynthesizeRequest) returns (SynthesizeResponse);
+  rpc Synthesize (SynthesizeRequest) returns (SynthesizeResponse) {
+    option (google.api.http) = {
+      post: "/v1/synthesize"
+      body: "*"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      summary: "Synthesize Report";
+      description: "Generates a final research report from verified claims";
+      tags: "Synthesizer";
+    };
+  }
 }
 
 message SynthesizeRequest {
-  repeated CritiqueResult verification_results = 1;
+  repeated CritiqueResult verification_results = 1 [(buf.validate.field).repeated.min_items = 1];
   map<string, string> context = 2;
-  string run_id = 3;
+  string run_id = 3 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).required = true
+  ];
 }
 
 message SynthesizeResponse {
