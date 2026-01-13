@@ -1,0 +1,41 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/deepdag/hdrp/api/gen
+plugins:
+  # Go protobuf generation
+  - remote: buf.build/protocolbuffers/go
+    out: gen/go
+    opt:
+      - paths=source_relative
+  
+  # Go gRPC generation
+  - remote: buf.build/grpc/go
+    out: gen/go
+    opt:
+      - paths=source_relative
+  
+  # Go gRPC-Gateway generation
+  - remote: buf.build/grpc-ecosystem/gateway
+    out: gen/go
+    opt:
+      - paths=source_relative
+      - generate_unbound_methods=true
+  
+  # OpenAPI generation
+  - remote: buf.build/grpc-ecosystem/openapiv2
+    out: openapi
+    opt:
+      - allow_merge=true
+      - merge_file_name=apidocs
+      - json_names_for_fields=true
+  
+  # Python protobuf generation
+  - remote: buf.build/protocolbuffers/python
+    out: gen/python
+  
+  # Python gRPC generation
+  - remote: buf.build/grpc/python
+    out: gen/python
