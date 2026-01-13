@@ -1,0 +1,696 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "HDRP Orchestrator API",
+    "description": "Hierarchical Deep Research Pipeline - Orchestrator Service",
+    "version": "1.0"
+  },
+  "tags": [
+    {
+      "name": "HDRPService"
+    },
+    {
+      "name": "PrincipalService"
+    },
+    {
+      "name": "ResearcherService"
+    },
+    {
+      "name": "CriticService"
+    },
+    {
+      "name": "SynthesizerService"
+    }
+  ],
+  "schemes": [
+    "http",
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/decompose": {
+      "post": {
+        "summary": "Decompose Query into DAG",
+        "description": "Breaks down a research query into a Directed Acyclic Graph of subtasks",
+        "operationId": "PrincipalService_DecomposeQuery",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/servicesDecompositionResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/servicesQueryRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Principal"
+        ]
+      }
+    },
+    "/v1/execute": {
+      "post": {
+        "summary": "Execute DAG",
+        "description": "Executes a research DAG and returns the result",
+        "operationId": "HDRPService_ExecuteGraph",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/hdrpGraphExecutionResult"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/hdrpGraph"
+            }
+          }
+        ],
+        "tags": [
+          "Orchestrator"
+        ]
+      }
+    },
+    "/v1/parse": {
+      "post": {
+        "summary": "Parse Query",
+        "description": "Parses a research query into an objective with intent and constraints",
+        "operationId": "HDRPService_ParseQuery",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/hdrpParseQueryResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/hdrpParseQueryRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Orchestrator"
+        ]
+      }
+    },
+    "/v1/research": {
+      "post": {
+        "summary": "Conduct Research",
+        "description": "Extracts atomic claims from sources for a given query",
+        "operationId": "ResearcherService_Research",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/servicesResearchResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/servicesResearchRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Researcher"
+        ]
+      }
+    },
+    "/v1/synthesize": {
+      "post": {
+        "summary": "Synthesize Report",
+        "description": "Generates a final research report from verified claims",
+        "operationId": "SynthesizerService_Synthesize",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/servicesSynthesizeResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/servicesSynthesizeRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Synthesizer"
+        ]
+      }
+    },
+    "/v1/validate": {
+      "post": {
+        "summary": "Validate DAG",
+        "description": "Validates a DAG structure for cycles and correctness",
+        "operationId": "HDRPService_ValidateGraph",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/hdrpValidationResult"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/hdrpGraph"
+            }
+          }
+        ],
+        "tags": [
+          "Orchestrator"
+        ]
+      }
+    },
+    "/v1/verify": {
+      "post": {
+        "summary": "Verify Claims",
+        "description": "Validates and critiques atomic claims extracted from research",
+        "operationId": "CriticService_Verify",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/servicesVerifyResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/servicesVerifyRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Critic"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "hdrpEdge": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      }
+    },
+    "hdrpGraph": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/hdrpNode"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/hdrpEdge"
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "hdrpGraphExecutionResult": {
+      "type": "object",
+      "properties": {
+        "graphId": {
+          "type": "string"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "outputArtifactUri": {
+          "type": "string"
+        },
+        "errorMessage": {
+          "type": "string"
+        }
+      }
+    },
+    "hdrpNode": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "title": "e.g., \"researcher\", \"synthesizer\", \"critic\""
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "relevanceScore": {
+          "type": "number",
+          "format": "double",
+          "title": "0.0 to 1.0 indicating importance or confidence"
+        }
+      }
+    },
+    "hdrpObjective": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "intentType": {
+          "type": "string",
+          "title": "e.g., \"RESEARCH\", \"CODE_GEN\", \"ANALYSIS\""
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "hdrpParseQueryRequest": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "hdrpParseQueryResponse": {
+      "type": "object",
+      "properties": {
+        "objective": {
+          "$ref": "#/definitions/hdrpObjective"
+        }
+      }
+    },
+    "hdrpValidationResult": {
+      "type": "object",
+      "properties": {
+        "isValid": {
+          "type": "boolean"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "hdrpservicesEdge": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      }
+    },
+    "hdrpservicesGraph": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/hdrpservicesNode"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/hdrpservicesEdge"
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "hdrpservicesNode": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string"
+        },
+        "relevanceScore": {
+          "type": "number",
+          "format": "double"
+        },
+        "depth": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "servicesAtomicClaim": {
+      "type": "object",
+      "properties": {
+        "statement": {
+          "type": "string"
+        },
+        "sourceUrl": {
+          "type": "string"
+        },
+        "supportText": {
+          "type": "string"
+        },
+        "sourceNodeId": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "sourceTitle": {
+          "type": "string"
+        },
+        "sourceRank": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "servicesCritiqueResult": {
+      "type": "object",
+      "properties": {
+        "claim": {
+          "$ref": "#/definitions/servicesAtomicClaim"
+        },
+        "isValid": {
+          "type": "boolean"
+        },
+        "reasoning": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "servicesDecompositionResponse": {
+      "type": "object",
+      "properties": {
+        "graph": {
+          "$ref": "#/definitions/hdrpservicesGraph"
+        },
+        "subtasks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "servicesQueryRequest": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "runId": {
+          "type": "string"
+        }
+      }
+    },
+    "servicesResearchRequest": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "sourceNodeId": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "servicesResearchResponse": {
+      "type": "object",
+      "properties": {
+        "claims": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/servicesAtomicClaim"
+          }
+        },
+        "totalSources": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "servicesSynthesizeRequest": {
+      "type": "object",
+      "properties": {
+        "verificationResults": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/servicesCritiqueResult"
+          }
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "runId": {
+          "type": "string"
+        }
+      }
+    },
+    "servicesSynthesizeResponse": {
+      "type": "object",
+      "properties": {
+        "report": {
+          "type": "string"
+        },
+        "artifactUri": {
+          "type": "string"
+        }
+      }
+    },
+    "servicesVerifyRequest": {
+      "type": "object",
+      "properties": {
+        "claims": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/servicesAtomicClaim"
+          }
+        },
+        "task": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        }
+      }
+    },
+    "servicesVerifyResponse": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/servicesCritiqueResult"
+          }
+        },
+        "verifiedCount": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "rejectedCount": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    }
+  }
+}
