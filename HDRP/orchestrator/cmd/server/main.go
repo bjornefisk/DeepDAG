@@ -19,6 +19,8 @@ import (
 	pb "github.com/deepdag/hdrp/api/gen/services"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // ExecuteRequest is the HTTP payload for query execution.
@@ -115,6 +117,35 @@ func (s *Server) handleExecute(w http.ResponseWriter, r *http.Request) {
 
 	decompResp, err := s.clients.Principal.DecomposeQuery(ctx, decompReq)
 	if err != nil {
+		// Extract gRPC status code and convert to HTTP status
+		if st, ok := status.FromError(err); ok {
+			switch st.Code() {
+			case codes.InvalidArgument:
+				log.Printf("[Server] Invalid argument: %v", st.Message())
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(ExecuteResponse{
+					RunID:        runID,
+					Success:      false,
+					ErrorMessage: fmt.Sprintf("Invalid query: %s", st.Message()),
+				})
+				return
+			case codes.DeadlineExceeded:
+				log.Printf("[Server] Deadline exceeded: %v", st.Message())
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusGatewayTimeout)
+				json.NewEncoder(w).Encode(ExecuteResponse{
+					RunID:        runID,
+					Success:      false,
+					ErrorMessage: fmt.Sprintf("Request timed out: %s", st.Message()),
+				})
+				return
+			default:
+				log.Printf("[Server] gRPC error: %v", st.Message())
+				s.sendErrorResponse(w, runID, fmt.Sprintf("Service error: %s", st.Message()))
+				return
+			}
+		}
 		log.Printf("[Server] Principal decomposition failed: %v", err)
 		s.sendErrorResponse(w, runID, fmt.Sprintf("Query decomposition failed: %v", err))
 		return
