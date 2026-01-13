@@ -34,64 +34,94 @@ class PrincipalServicer(hdrp_services_pb2_grpc.PrincipalServiceServicer):
         For MVP, creates a linear DAG: query -> researcher -> critic -> synthesizer.
         Production would use an LLM to identify dependencies and entities.
         """
-        query = request.query
-        run_id = request.run_id or self.logger.run_id
-        
-        self.logger.log("decompose_query", {
-            "query": query,
-            "run_id": run_id
-        })
-        
-        # Create a simple linear DAG for MVP
-        # Node IDs follow the pattern: <type>_<index>
-        nodes = [
-            hdrp_services_pb2.Node(
-                id="researcher_1",
-                type="researcher",
-                config={"query": query},
-                status="CREATED",
-                relevance_score=1.0,
-                depth=0
-            ),
-            hdrp_services_pb2.Node(
-                id="critic_1",
-                type="critic",
-                config={"task": query},
-                status="CREATED",
-                relevance_score=1.0,
-                depth=1
-            ),
-            hdrp_services_pb2.Node(
-                id="synthesizer_1",
-                type="synthesizer",
-                config={"query": query},
-                status="CREATED",
-                relevance_score=1.0,
-                depth=2
-            )
-        ]
-        
-        edges = [
-            hdrp_services_pb2.Edge(from_="researcher_1", to="critic_1"),
-            hdrp_services_pb2.Edge(from_="critic_1", to="synthesizer_1")
-        ]
-        
-        graph = hdrp_services_pb2.Graph(
-            id=run_id,
-            nodes=nodes,
-            edges=edges,
-            metadata={
-                "goal": query,
+        try:
+            # Validate query (protobuf validation should catch empty strings, but we add business logic)
+            query = request.query.strip()
+            if not query:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details('Query cannot be empty or whitespace only')
+                return hdrp_services_pb2.DecompositionResponse()
+            
+            if len(query) > 500:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details('Query exceeds maximum length of 500 characters')
+                return hdrp_services_pb2.DecompositionResponse()
+            
+            run_id = request.run_id or self.logger.run_id
+            
+            self.logger.log("decompose_query", {
+                "query": query,
                 "run_id": run_id
-            }
-        )
+            })
+            
+            # Create a simple linear DAG for MVP
+            # Node IDs follow the pattern: <type>_<index>
+            nodes = [
+                hdrp_services_pb2.Node(
+                    id="researcher_1",
+                    type="researcher",
+                    config={"query": query},
+                    status="CREATED",
+                    relevance_score=1.0,
+                    depth=0
+                ),
+                hdrp_services_pb2.Node(
+                    id="critic_1",
+                    type="critic",
+                    config={"task": query},
+                    status="CREATED",
+                    relevance_score=1.0,
+                    depth=1
+                ),
+                hdrp_services_pb2.Node(
+                    id="synthesizer_1",
+                    type="synthesizer",
+                    config={"query": query},
+                    status="CREATED",
+                    relevance_score=1.0,
+                    depth=2
+                )
+            ]
+            
+            edges = [
+                hdrp_services_pb2.Edge(from_="researcher_1", to="critic_1"),
+                hdrp_services_pb2.Edge(from_="critic_1", to="synthesizer_1")
+            ]
+            
+            graph = hdrp_services_pb2.Graph(
+                id=run_id,
+                nodes=nodes,
+                edges=edges,
+                metadata={
+                    "goal": query,
+                    "run_id": run_id
+                }
+            )
+            
+            subtasks = [query]  # For MVP, single task
+            
+            return hdrp_services_pb2.DecompositionResponse(
+                graph=graph,
+                subtasks=subtasks
+            )
+            
+        except ValueError as e:
+            self.logger.log("decompose_error", {
+                "error": str(e),
+                "error_type": "ValueError"
+            })
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(f'Invalid input: {str(e)}')
+            return hdrp_services_pb2.DecompositionResponse()
         
-        subtasks = [query]  # For MVP, single task
-        
-        return hdrp_services_pb2.DecompositionResponse(
-            graph=graph,
-            subtasks=subtasks
-        )
+        except Exception as e:
+            self.logger.log("decompose_error", {
+                "error": str(e),
+                "error_type": type(e).__name__
+            })
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f'Internal error: {str(e)}')
+            return hdrp_services_pb2.DecompositionResponse()
 
 
 def serve(port: int = 50051):

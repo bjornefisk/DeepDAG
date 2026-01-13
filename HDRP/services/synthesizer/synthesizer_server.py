@@ -38,12 +38,29 @@ class SynthesizerServicer(hdrp_services_pb2_grpc.SynthesizerServiceServicer):
         Returns:
             SynthesizeResponse with markdown report.
         """
-        run_id = request.run_id
-        ctx = dict(request.context) if request.context else {}
-        
-        logger.info(f"Synthesize request: run_id={run_id}, results={len(request.verification_results)}")
-        
         try:
+            # Validate request
+            if not request.verification_results:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details('At least one verification result is required')
+                return hdrp_services_pb2.SynthesizeResponse(
+                    report="# Error\n\nNo verification results provided.",
+                    artifact_uri=""
+                )
+            
+            run_id = request.run_id
+            if not run_id:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details('run_id is required')
+                return hdrp_services_pb2.SynthesizeResponse(
+                    report="# Error\n\nrun_id is required.",
+                    artifact_uri=""
+                )
+            
+            ctx = dict(request.context) if request.context else {}
+            
+            logger.info(f"Synthesize request: run_id={run_id}, results={len(request.verification_results)}")
+            
             # Convert protobuf verification results to CritiqueResult objects
             critique_results = []
             for pb_result in request.verification_results:
@@ -82,13 +99,31 @@ class SynthesizerServicer(hdrp_services_pb2_grpc.SynthesizerServiceServicer):
                 report=report,
                 artifact_uri=""
             )
+        
+        except ValueError as e:
+            logger.error(f"Validation error: {e}")
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(f'Invalid input: {str(e)}')
+            return hdrp_services_pb2.SynthesizeResponse(
+                report="# Error\n\nInvalid input provided.",
+                artifact_uri=""
+            )
+        
+        except TimeoutError as e:
+            logger.error(f"Timeout error: {e}")
+            context.set_code(grpc.StatusCode.DEADLINE_EXCEEDED)
+            context.set_details(f'Request processing exceeded deadline: {str(e)}')
+            return hdrp_services_pb2.SynthesizeResponse(
+                report="# Error\n\nReport generation timed out.",
+                artifact_uri=""
+            )
             
         except Exception as e:
             logger.error(f"Synthesis failed: {e}", exc_info=True)
             context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Synthesis failed: {str(e)}")
+            context.set_details(f"Internal error: {str(e)}")
             return hdrp_services_pb2.SynthesizeResponse(
-                report="# Error\n\nFailed to generate report.",
+                report="# Error\n\nFailed to generate report due to internal error.",
                 artifact_uri=""
             )
 

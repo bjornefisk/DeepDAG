@@ -41,13 +41,29 @@ class ResearcherServicer(hdrp_services_pb2_grpc.ResearcherServiceServicer):
         Returns:
             ResearchResponse with extracted claims.
         """
-        query = request.query
-        source_node_id = request.source_node_id or "root"
-        run_id = request.run_id
-        
-        logger.info(f"Research request: query='{query}', node={source_node_id}, run_id={run_id}")
-        
         try:
+            # Validate request
+            query = request.query.strip()
+            if not query:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details('Query cannot be empty or whitespace only')
+                return hdrp_services_pb2.ResearchResponse(claims=[], total_sources=0)
+            
+            if len(query) > 500:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details('Query exceeds maximum length of 500 characters')
+                return hdrp_services_pb2.ResearchResponse(claims=[], total_sources=0)
+            
+            source_node_id = request.source_node_id or "root"
+            run_id = request.run_id
+            
+            if not run_id:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details('run_id is required')
+                return hdrp_services_pb2.ResearchResponse(claims=[], total_sources=0)
+            
+            logger.info(f"Research request: query='{query}', node={source_node_id}, run_id={run_id}")
+            
             # Create researcher service instance
             researcher = ResearcherService(
                 search_provider=self.search_provider,
@@ -77,11 +93,23 @@ class ResearcherServicer(hdrp_services_pb2_grpc.ResearcherServiceServicer):
                 claims=pb_claims,
                 total_sources=len(set(c.source_url for c in claims))
             )
+        
+        except ValueError as e:
+            logger.error(f"Validation error: {e}")
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(f'Invalid input: {str(e)}')
+            return hdrp_services_pb2.ResearchResponse(claims=[], total_sources=0)
+        
+        except TimeoutError as e:
+            logger.error(f"Timeout error: {e}")
+            context.set_code(grpc.StatusCode.DEADLINE_EXCEEDED)
+            context.set_details(f'Request processing exceeded deadline: {str(e)}')
+            return hdrp_services_pb2.ResearchResponse(claims=[], total_sources=0)
             
         except Exception as e:
             logger.error(f"Research failed: {e}", exc_info=True)
             context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Research failed: {str(e)}")
+            context.set_details(f"Internal error: {str(e)}")
             return hdrp_services_pb2.ResearchResponse(claims=[], total_sources=0)
 
 

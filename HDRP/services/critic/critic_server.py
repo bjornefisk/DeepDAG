@@ -35,12 +35,39 @@ class CriticServicer(hdrp_services_pb2_grpc.CriticServiceServicer):
         Returns:
             VerifyResponse with verification results.
         """
-        task = request.task
-        run_id = request.run_id
-        
-        logger.info(f"Verify request: task='{task}', run_id={run_id}, claims={len(request.claims)}")
-        
         try:
+            # Validate request
+            if not request.claims:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details('At least one claim is required')
+                return hdrp_services_pb2.VerifyResponse(
+                    results=[],
+                    verified_count=0,
+                    rejected_count=0
+                )
+            
+            task = request.task.strip()
+            if not task:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details('Task cannot be empty')
+                return hdrp_services_pb2.VerifyResponse(
+                    results=[],
+                    verified_count=0,
+                    rejected_count=0
+                )
+            
+            run_id = request.run_id
+            if not run_id:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details('run_id is required')
+                return hdrp_services_pb2.VerifyResponse(
+                    results=[],
+                    verified_count=0,
+                    rejected_count=0
+                )
+            
+            logger.info(f"Verify request: task='{task}', run_id={run_id}, claims={len(request.claims)}")
+            
             # Convert protobuf claims to AtomicClaim objects
             claims = []
             for pb_claim in request.claims:
@@ -98,11 +125,31 @@ class CriticServicer(hdrp_services_pb2_grpc.CriticServiceServicer):
                 verified_count=verified_count,
                 rejected_count=rejected_count
             )
+        
+        except ValueError as e:
+            logger.error(f"Validation error: {e}")
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(f'Invalid input: {str(e)}')
+            return hdrp_services_pb2.VerifyResponse(
+                results=[],
+                verified_count=0,
+                rejected_count=0
+            )
+        
+        except TimeoutError as e:
+            logger.error(f"Timeout error: {e}")
+            context.set_code(grpc.StatusCode.DEADLINE_EXCEEDED)
+            context.set_details(f'Request processing exceeded deadline: {str(e)}')
+            return hdrp_services_pb2.VerifyResponse(
+                results=[],
+                verified_count=0,
+                rejected_count=0
+            )
             
         except Exception as e:
             logger.error(f"Verification failed: {e}", exc_info=True)
             context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Verification failed: {str(e)}")
+            context.set_details(f"Internal error: {str(e)}")
             return hdrp_services_pb2.VerifyResponse(
                 results=[],
                 verified_count=0,
