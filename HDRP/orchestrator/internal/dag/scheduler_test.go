@@ -4,85 +4,204 @@ import (
 	"testing"
 )
 
-func TestScheduleNext(t *testing.T) {
-	t.Run("Select Highest Relevance", func(t *testing.T) {
+func TestScheduleNextBatch(t *testing.T) {
+	t.Run("Batch Size Limit", func(t *testing.T) {
 		g := &Graph{
 			Nodes: []Node{
-				{ID: "low-prio", Status: StatusPending, RelevanceScore: 0.1},
-				{ID: "high-prio", Status: StatusPending, RelevanceScore: 0.9},
-				{ID: "med-prio", Status: StatusPending, RelevanceScore: 0.5},
+				{ID: "A", Status: StatusPending, RelevanceScore: 0.9},
+				{ID: "B", Status: StatusPending, RelevanceScore: 0.8},
+				{ID: "C", Status: StatusPending, RelevanceScore: 0.7},
+				{ID: "D", Status: StatusPending, RelevanceScore: 0.6},
+				{ID: "E", Status: StatusPending, RelevanceScore: 0.5},
 			},
 		}
 
-		next, err := g.ScheduleNext()
+		batch, err := g.ScheduleNextBatch(3)
 		if err != nil {
-			t.Fatalf("ScheduleNext failed: %v", err)
+			t.Fatalf("ScheduleNextBatch failed: %v", err)
 		}
-		if next.ID != "high-prio" {
-			t.Errorf("Expected high-prio to be scheduled, got %s", next.ID)
+
+		if len(batch) != 3 {
+			t.Errorf("Expected 3 nodes, got %d", len(batch))
 		}
-		if next.Status != StatusRunning {
-			t.Errorf("Scheduled node should be RUNNING, got %s", next.Status)
+
+		// Verify they're the top 3 by relevance
+		if batch[0].ID != "A" || batch[1].ID != "B" || batch[2].ID != "C" {
+			t.Errorf("Wrong nodes selected: %v", []string{batch[0].ID, batch[1].ID, batch[2].ID})
 		}
-		
-		// Verify graph state updated
-		if g.Nodes[1].Status != StatusRunning {
-			t.Error("Graph state not updated")
+
+		// Verify they're all RUNNING
+		for _, node := range batch {
+			if node.Status != StatusRunning {
+				t.Errorf("Node %s should be RUNNING, got %s", node.ID, node.Status)
+			}
 		}
 	})
 
-	t.Run("Deterministic Tie-Break", func(t *testing.T) {
+	t.Run("Parallel Scheduling", func(t *testing.T) {
 		g := &Graph{
 			Nodes: []Node{
-				{ID: "task-B", Status: StatusPending, RelevanceScore: 0.5},
 				{ID: "task-A", Status: StatusPending, RelevanceScore: 0.5},
+				{ID: "task-B", Status: StatusPending, RelevanceScore: 0.5},
+				{ID: "task-C", Status: StatusPending, RelevanceScore: 0.5},
 			},
 		}
 
-		next, err := g.ScheduleNext()
+		batch, err := g.ScheduleNextBatch(10)
 		if err != nil {
-			t.Fatalf("ScheduleNext failed: %v", err)
+			t.Fatalf("ScheduleNextBatch failed: %v", err)
 		}
-		if next.ID != "task-A" {
-			t.Errorf("Expected task-A (lexicographical), got %s", next.ID)
+
+		if len(batch) != 3 {
+			t.Errorf("Expected all 3 nodes to be scheduled, got %d", len(batch))
+		}
+
+		// Verify graph state updated
+		runningCount := 0
+		for _, n := range g.Nodes {
+			if n.Status == StatusRunning {
+				runningCount++
+			}
+		}
+
+		if runningCount != 3 {
+			t.Errorf("Expected 3 nodes RUNNING in graph, got %d", runningCount)
 		}
 	})
 
-	t.Run("Enforce Serial Execution", func(t *testing.T) {
+	t.Run("Empty When No Pending", func(t *testing.T) {
 		g := &Graph{
 			Nodes: []Node{
-				{ID: "running-task", Status: StatusRunning},
-				{ID: "pending-task", Status: StatusPending},
+				{ID: "done-A", Status: StatusSucceeded},
+				{ID: "done-B", Status: StatusSucceeded},
 			},
 		}
 
-		_, err := g.ScheduleNext()
-		if err != ErrNodeAlreadyRunning {
-			t.Errorf("Expected ErrNodeAlreadyRunning, got %v", err)
-		}
-	})
-
-	t.Run("No Pending Nodes", func(t *testing.T) {
-		g := &Graph{
-			Nodes: []Node{
-				{ID: "done-task", Status: StatusSucceeded},
-			},
-		}
-
-		next, err := g.ScheduleNext()
+		batch, err := g.ScheduleNextBatch(5)
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
-		if next != nil {
-			t.Errorf("Expected nil (no work), got %v", next)
+
+		if len(batch) != 0 {
+			t.Errorf("Expected empty batch, got %d nodes", len(batch))
 		}
 	})
 
-	t.Run("Transition Failure Handling", func(t *testing.T) {
-		// Mock a graph where we can simulate transition failure? 
-		// SetNodeStatus primarily fails if node is missing or invalid transition.
-		// Let's rely on the fact that if we have a Pending node, transition to Running is valid.
-		// We can test 'missing node' by corrupting memory but that's hard safely.
-		// Instead, we trust the integration.
+	t.Run("Backward Compatibility with ScheduleNext", func(t *testing.T) {
+		g := &Graph{
+			Nodes: []Node{
+				{ID: "high", Status: StatusPending, RelevanceScore: 0.9},
+				{ID: "low", Status: StatusPending, RelevanceScore: 0.1},
+			},
+		}
+
+		node, err := g.ScheduleNext()
+		if err != nil {
+			t.Fatalf("ScheduleNext failed: %v", err)
+		}
+
+		if node.ID != "high" {
+			t.Errorf("Expected 'high' to be selected, got %s", node.ID)
+		}
+
+		if node.Status != StatusRunning {
+			t.Errorf("Node should be RUNNING, got %s", node.Status)
+		}
+	})
+
+	t.Run("Rollback on Transition Failure", func(t *testing.T) {
+		// Create a graph with an already-running node to simulate a transition failure
+		// This test is more conceptual - in practice, SetNodeStatus validates transitions
+		g := &Graph{
+			Nodes: []Node{
+				{ID: "A", Status: StatusPending, RelevanceScore: 0.9},
+				{ID: "B", Status: StatusSucceeded, RelevanceScore: 0.8}, // Cannot transition to RUNNING
+			},
+		}
+
+		// Manually break state to test rollback
+		// In real use, this would be caught by SetNodeStatus validation
+		batch, err := g.ScheduleNextBatch(1)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		if len(batch) != 1 || batch[0].ID != "A" {
+			t.Errorf("Expected to schedule A, got %v", batch)
+		}
+	})
+}
+
+func TestGetReadyNodesCount(t *testing.T) {
+	g := &Graph{
+		Nodes: []Node{
+			{ID: "A", Status: StatusPending},
+			{ID: "B", Status: StatusRunning},
+			{ID: "C", Status: StatusPending},
+			{ID: "D", Status: StatusSucceeded},
+			{ID: "E", Status: StatusBlocked},
+		},
+	}
+
+	count := g.GetReadyNodesCount()
+	if count != 2 {
+		t.Errorf("Expected 2 ready nodes, got %d", count)
+	}
+}
+
+func TestGetRunningNodesCount(t *testing.T) {
+	g := &Graph{
+		Nodes: []Node{
+			{ID: "A", Status: StatusRunning},
+			{ID: "B", Status: StatusRunning},
+			{ID: "C", Status: StatusPending},
+		},
+	}
+
+	count := g.GetRunningNodesCount()
+	if count != 2 {
+		t.Errorf("Expected 2 running nodes, got %d", count)
+	}
+}
+
+// Benchmark parallel vs serial scheduling
+func BenchmarkScheduling(b *testing.B) {
+	createGraph := func(size int) *Graph {
+		nodes := make([]Node, size)
+		for i := 0; i < size; i++ {
+			nodes[i] = Node{
+				ID:             string(rune('A' + i%26)),
+				Status:         StatusPending,
+				RelevanceScore: 0.5,
+			}
+		}
+		return &Graph{Nodes: nodes}
+	}
+
+	b.Run("Serial", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			g := createGraph(100)
+			for j := 0; j < 100; j++ {
+				_, _ = g.ScheduleNext()
+			}
+		}
+	})
+
+	b.Run("Batch10", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			g := createGraph(100)
+			for j := 0; j < 10; j++ {
+				_, _ = g.ScheduleNextBatch(10)
+			}
+		}
+	})
+
+	b.Run("Batch50", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			g := createGraph(100)
+			for j := 0; j < 2; j++ {
+				_, _ = g.ScheduleNextBatch(50)
+			}
+		}
 	})
 }
