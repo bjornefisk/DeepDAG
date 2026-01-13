@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"hdrp/internal/clients"
+	"hdrp/internal/concurrency"
 	"hdrp/internal/dag"
 
 	pb "github.com/deepdag/hdrp/api/gen/services"
@@ -14,9 +15,12 @@ import (
 
 // DAGExecutor orchestrates concurrent DAG node execution.
 type DAGExecutor struct {
-	clients    *clients.ServiceClients
-	maxWorkers int
-	mu         sync.RWMutex
+	clients         *clients.ServiceClients
+	maxWorkers      int
+	config          *concurrency.Config
+	rateLimiters    *concurrency.RateLimiterManager
+	lockManager     *concurrency.LockManager
+	mu              sync.RWMutex
 }
 
 // ExecutionResult contains the final DAG execution outcome.
@@ -37,20 +41,33 @@ type NodeResult struct {
 }
 
 // NewDAGExecutor creates a DAG executor with the specified worker pool size.
+// If maxWorkers <= 0, uses default from configuration.
 func NewDAGExecutor(clients *clients.ServiceClients, maxWorkers int) *DAGExecutor {
+	config := concurrency.LoadConfig()
+	
 	if maxWorkers <= 0 {
-		maxWorkers = 4
+		maxWorkers = config.MaxWorkers
+	}
+
+	// Initialize lock manager
+	lockManager, err := concurrency.NewLockManager(config)
+	if err != nil {
+		log.Printf("[DAGExecutor] Warning: failed to initialize lock manager: %v", err)
+		// Continue with nil lock manager - will skip distributed locking
 	}
 
 	return &DAGExecutor{
-		clients:    clients,
-		maxWorkers: maxWorkers,
+		clients:      clients,
+		maxWorkers:   maxWorkers,
+		config:       config,
+		rateLimiters: concurrency.NewRateLimiterManager(config),
+		lockManager:  lockManager,
 	}
 }
 
-// Execute runs the DAG to completion with dependency-aware scheduling.
+// Execute runs the DAG to completion with dependency-aware parallel scheduling.
 func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID string) (*ExecutionResult, error) {
-	log.Printf("[Executor] Starting execution of graph %s", graph.ID)
+	log.Printf("[Executor] Starting execution of graph %s with max %d workers", graph.ID, e.maxWorkers)
 
 	if err := graph.Validate(); err != nil {
 		return nil, fmt.Errorf("graph validation failed: %w", err)
@@ -67,6 +84,14 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID strin
 	nodeResults := make(map[string]*NodeResult)
 	var resultsMu sync.RWMutex
 
+	// Channel for node completion notifications
+	resultChan := make(chan *NodeResult, e.maxWorkers)
+	defer close(resultChan)
+
+	// Track number of nodes currently executing
+	pendingCount := 0
+	
+	// Execution loop
 	for {
 		select {
 		case <-ctx.Done():
@@ -74,15 +99,58 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID strin
 		default:
 		}
 
-		node, err := graph.ScheduleNext()
-		if err == dag.ErrNodeAlreadyRunning {
-			// TODO: Replace busy-wait with condition variable.
-			continue
-		} else if err != nil {
-			return nil, fmt.Errorf("scheduling failed: %w", err)
+		// Schedule a batch of ready nodes
+		availableSlots := e.maxWorkers - pendingCount
+		if availableSlots > 0 {
+			batch, err := graph.ScheduleNextBatch(availableSlots)
+			if err != nil {
+				return nil, fmt.Errorf("scheduling failed: %w", err)
+			}
+
+			// Launch goroutines for each scheduled node
+			for _, node := range batch {
+				pendingCount++
+				go e.executeNodeAsync(ctx, node, graph, nodeResults, &resultsMu, runID, resultChan)
+			}
 		}
 
-		if node == nil {
+		// Wait for at least one node to complete if any are pending
+		if pendingCount > 0 {
+			select {
+			case result := <-resultChan:
+				pendingCount--
+				
+				// Store result
+				resultsMu.Lock()
+				nodeResults[result.NodeID] = result
+				resultsMu.Unlock()
+
+				// Update graph state
+				var newStatus dag.Status
+				if result.Success {
+					newStatus = dag.StatusSucceeded
+				} else {
+					newStatus = dag.StatusFailed
+					log.Printf("[Executor] Node %s failed: %v", result.NodeID, result.Error)
+				}
+
+				if err := graph.SetNodeStatus(result.NodeID, newStatus); err != nil {
+					return nil, fmt.Errorf("failed to update node status: %w", err)
+				}
+
+				// Re-evaluate readiness to unblock dependent nodes
+				if err := graph.EvaluateReadiness(); err != nil {
+					return nil, fmt.Errorf("failed to re-evaluate readiness: %w", err)
+				}
+
+			case <-ctx.Done():
+				return nil, fmt.Errorf("execution cancelled: %w", ctx.Err())
+			}
+		}
+
+		// Check termination conditions
+		if pendingCount == 0 && graph.GetReadyNodesCount() == 0 {
+			// No more work to schedule and nothing running
 			allDone := true
 			anyFailed := false
 
@@ -108,35 +176,12 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID strin
 				return e.extractFinalResult(graph, nodeResults)
 			}
 
+			// Deadlock detected: no work available but not all nodes completed
 			return &ExecutionResult{
 				GraphID:      graph.ID,
 				Success:      false,
 				ErrorMessage: "Execution deadlocked: nodes are blocked",
 			}, nil
-		}
-
-		log.Printf("[Executor] Executing node %s (type: %s)", node.ID, node.Type)
-
-		result := e.executeNode(ctx, node, graph, nodeResults, runID)
-
-		resultsMu.Lock()
-		nodeResults[node.ID] = result
-		resultsMu.Unlock()
-
-		var newStatus dag.Status
-		if result.Success {
-			newStatus = dag.StatusSucceeded
-		} else {
-			newStatus = dag.StatusFailed
-			log.Printf("[Executor] Node %s failed: %v", node.ID, result.Error)
-		}
-
-		if err := graph.SetNodeStatus(node.ID, newStatus); err != nil {
-			return nil, fmt.Errorf("failed to update node status: %w", err)
-		}
-
-		if err := graph.EvaluateReadiness(); err != nil {
-			return nil, fmt.Errorf("failed to re-evaluate readiness: %w", err)
 		}
 	}
 }
