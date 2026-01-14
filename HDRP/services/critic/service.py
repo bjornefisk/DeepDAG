@@ -23,9 +23,6 @@ class CriticService:
            problem for complex queries (e.g. "RSA" details are relevant to "Cryptography"
            if "RSA" was established as a subtopic).
         """
-        # #region agent log
-        import json;open('/mnt/d/Desktop/deepdag/.cursor/debug.log','a').write(json.dumps({"location":"service.py:16","message":"verify() entry","data":{"task":task,"num_claims":len(claims)},"timestamp":__import__('datetime').datetime.now().timestamp()*1000,"sessionId":"debug-session","hypothesisId":"H1"})+'\n')
-        # #endregion
         results = []
         
         STOP_WORDS = {
@@ -126,9 +123,6 @@ class CriticService:
                 claim_type = self._detect_claim_type(claim.statement)
                 threshold = 0.5 if claim_type == "speculative" else 0.6
                 
-                # #region agent log
-                import json;open('/mnt/d/Desktop/deepdag/.cursor/debug.log','a').write(json.dumps({"location":"service.py:126","message":"grounding check","data":{"overlap":overlap,"filtered_tokens_len":len(filtered_tokens),"threshold":threshold,"claim_type":claim_type,"overlap_ratio":overlap/len(filtered_tokens) if len(filtered_tokens) > 0 else 0},"timestamp":__import__('datetime').datetime.now().timestamp()*1000,"sessionId":"debug-session","hypothesisId":"H5"})+'\n')
-                # #endregion
                 
                 if len(filtered_tokens) > 0 and (overlap / len(filtered_tokens)) < threshold:
                     rejection_reason = f"REJECTED: Low grounding"
@@ -180,9 +174,6 @@ class CriticService:
                 if claim_tokens:
                     entailment_score = len(relevance_overlap) / len(claim_tokens)
                 
-                # #region agent log
-                import json;open('/mnt/d/Desktop/deepdag/.cursor/debug.log','a').write(json.dumps({"location":"service.py:150","message":"relevance score","data":{"entailment_score":entailment_score,"claim_tokens":list(claim_tokens),"task_tokens":list(task_tokens),"relevance_overlap":list(relevance_overlap)},"timestamp":__import__('datetime').datetime.now().timestamp()*1000,"sessionId":"debug-session","hypothesisId":"H1"})+'\n')
-                # #endregion
                 
                 # Semantic boost check
                 if not relevance_overlap:
@@ -216,10 +207,6 @@ class CriticService:
             reason = c["reason"]
             score = c["score"]
             
-            # #region agent log
-            import json;open('/mnt/d/Desktop/deepdag/.cursor/debug.log','a').write(json.dumps({"location":"service.py:179","message":"pass2 evaluation","data":{"claim_id":claim.claim_id,"score":score,"has_reason":bool(reason),"threshold_check":score < 0.1},"timestamp":__import__('datetime').datetime.now().timestamp()*1000,"sessionId":"debug-session","hypothesisId":"H1"})+'\n')
-            # #endregion
-            
             if not reason:
                 # If relevance is low, try to rescue via subtopics
                 if score < 0.1: # Threshold for "low/no relevance" - catches truly irrelevant claims
@@ -241,9 +228,6 @@ class CriticService:
                         reason = "REJECTED: Not relevant to task"
             
             if reason:
-                # #region agent log
-                import json;open('/mnt/d/Desktop/deepdag/.cursor/debug.log','a').write(json.dumps({"location":"service.py:206","message":"logging rejection","data":{"claim_id":claim.claim_id,"reason":reason,"has_source_url":hasattr(claim,'source_url'),"source_url_val":getattr(claim,'source_url',None)},"timestamp":__import__('datetime').datetime.now().timestamp()*1000,"sessionId":"debug-session","hypothesisId":"H6"})+'\n')
-                # #endregion
                 self.logger.log("claim_rejected", {
                     "claim_id": claim.claim_id, 
                     "reason": reason,
@@ -325,10 +309,6 @@ class CriticService:
         # If no markers at all, assume factual (default for simple statements)
         if speculative_count == 0 and factual_count == 0:
             return "factual"
-        
-        # #region agent log
-        import json;open('/mnt/d/Desktop/deepdag/.cursor/debug.log','a').write(json.dumps({"location":"service.py:280","message":"claim type detection","data":{"statement":statement,"speculative_count":speculative_count,"factual_count":factual_count},"timestamp":__import__('datetime').datetime.now().timestamp()*1000,"sessionId":"debug-session","hypothesisId":"H4"})+'\n')
-        # #endregion
         
         if speculative_count > factual_count:
             return "speculative"
