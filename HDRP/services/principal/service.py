@@ -22,6 +22,13 @@ logger = logging.getLogger(__name__)
 MAX_DEPTH = 3
 
 
+def _make_edge(from_node: str, to_node: str) -> hdrp_services_pb2.Edge:
+    """Create an Edge proto, handling 'from' as a reserved Python keyword."""
+    edge = hdrp_services_pb2.Edge(to=to_node)
+    setattr(edge, 'from', from_node)
+    return edge
+
+
 @dataclass
 class Subtask:
     """Represents a decomposed subtask from LLM response."""
@@ -221,13 +228,13 @@ class PrincipalService:
                 
             for dep_id in subtask.dependencies:
                 if dep_id in valid_ids:
-                    edges.append(hdrp_services_pb2.Edge(
-                        from_=f"researcher_{dep_id}",
-                        to=f"researcher_{subtask.id}"
+                    edges.append(_make_edge(
+                        f"researcher_{dep_id}",
+                        f"researcher_{subtask.id}"
                     ))
         
         # Find leaf nodes (no outgoing edges)
-        has_outgoing = {e.from_ for e in edges}
+        has_outgoing = {getattr(e, 'from') for e in edges}
         leaves = [n.id for n in nodes if n.id not in has_outgoing]
         
         # Add critic node after all leaves
@@ -244,7 +251,7 @@ class PrincipalService:
         ))
         
         for leaf_id in leaves:
-            edges.append(hdrp_services_pb2.Edge(from_=leaf_id, to="critic_1"))
+            edges.append(_make_edge(leaf_id, "critic_1"))
         
         # Add synthesizer node after critic
         synth_depth = min(critic_depth + 1, MAX_DEPTH - 1)
@@ -257,7 +264,7 @@ class PrincipalService:
             depth=synth_depth
         ))
         
-        edges.append(hdrp_services_pb2.Edge(from_="critic_1", to="synthesizer_1"))
+        edges.append(_make_edge("critic_1", "synthesizer_1"))
         
         return hdrp_services_pb2.Graph(
             id=run_id,
@@ -350,8 +357,8 @@ class PrincipalService:
         ]
         
         edges = [
-            hdrp_services_pb2.Edge(from_="researcher_1", to="critic_1"),
-            hdrp_services_pb2.Edge(from_="critic_1", to="synthesizer_1")
+            _make_edge("researcher_1", "critic_1"),
+            _make_edge("critic_1", "synthesizer_1")
         ]
         
         graph = hdrp_services_pb2.Graph(
