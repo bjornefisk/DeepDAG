@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2_grpc
+from HDRP.services.principal.service import PrincipalService
 from HDRP.services.shared.logger import ResearchLogger
 
 logging.basicConfig(level=logging.INFO)
@@ -27,12 +28,13 @@ class PrincipalServicer(hdrp_services_pb2_grpc.PrincipalServiceServicer):
     
     def __init__(self):
         self.logger = ResearchLogger("principal_server")
+        self.service = PrincipalService()
     
     def DecomposeQuery(self, request, context):
         """Decomposes a query into a DAG of atomic research tasks.
         
-        For MVP, creates a linear DAG: query -> researcher -> critic -> synthesizer.
-        Production would use an LLM to identify dependencies and entities.
+        Uses LLM to identify dependencies and parallel work streams.
+        Falls back to linear DAG if LLM is unavailable.
         """
         try:
             # Validate query (protobuf validation should catch empty strings, but we add business logic)
@@ -54,56 +56,10 @@ class PrincipalServicer(hdrp_services_pb2_grpc.PrincipalServiceServicer):
                 "run_id": run_id
             })
             
-            # Create a simple linear DAG for MVP
-            # Node IDs follow the pattern: <type>_<index>
-            nodes = [
-                hdrp_services_pb2.Node(
-                    id="researcher_1",
-                    type="researcher",
-                    config={"query": query},
-                    status="CREATED",
-                    relevance_score=1.0,
-                    depth=0
-                ),
-                hdrp_services_pb2.Node(
-                    id="critic_1",
-                    type="critic",
-                    config={"task": query},
-                    status="CREATED",
-                    relevance_score=1.0,
-                    depth=1
-                ),
-                hdrp_services_pb2.Node(
-                    id="synthesizer_1",
-                    type="synthesizer",
-                    config={"query": query},
-                    status="CREATED",
-                    relevance_score=1.0,
-                    depth=2
-                )
-            ]
+            # Use LLM-based decomposition service
+            response = self.service.decompose_query(query, run_id)
             
-            edges = [
-                hdrp_services_pb2.Edge(from_="researcher_1", to="critic_1"),
-                hdrp_services_pb2.Edge(from_="critic_1", to="synthesizer_1")
-            ]
-            
-            graph = hdrp_services_pb2.Graph(
-                id=run_id,
-                nodes=nodes,
-                edges=edges,
-                metadata={
-                    "goal": query,
-                    "run_id": run_id
-                }
-            )
-            
-            subtasks = [query]  # For MVP, single task
-            
-            return hdrp_services_pb2.DecompositionResponse(
-                graph=graph,
-                subtasks=subtasks
-            )
+            return response
             
         except ValueError as e:
             self.logger.log("decompose_error", {
