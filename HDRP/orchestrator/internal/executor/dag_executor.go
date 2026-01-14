@@ -10,6 +10,7 @@ import (
 	"hdrp/internal/concurrency"
 	"hdrp/internal/dag"
 	"hdrp/internal/retry"
+	"hdrp/internal/storage"
 
 	pb "github.com/deepdag/hdrp/api/gen/services"
 )
@@ -25,6 +26,7 @@ type DAGExecutor struct {
 	circuitBreakers *retry.PerServiceBreakers
 	checkpointStore retry.CheckpointStore
 	retryMetrics    *retry.RetryMetrics
+	storage         storage.Storage // Persistent storage for DAG state
 	mu              sync.RWMutex
 }
 
@@ -72,7 +74,14 @@ func NewDAGExecutor(clients *clients.ServiceClients, maxWorkers int) *DAGExecuto
 		checkpointStore = retry.NewInMemoryCheckpointStore()
 	}
 
-	return &DAGExecutor{
+	// Initialize storage for DAG persistence
+	store, err := storage.NewSQLiteStorage()
+	if err != nil {
+		log.Printf("[DAGExecutor] Warning: failed to initialize storage: %v. Running in-memory only.", err)
+		store = nil
+	}
+
+	executor := &DAGExecutor{
 		clients:         clients,
 		maxWorkers:      maxWorkers,
 		config:          config,
@@ -82,12 +91,29 @@ func NewDAGExecutor(clients *clients.ServiceClients, maxWorkers int) *DAGExecuto
 		circuitBreakers: retry.NewPerServiceBreakers(),
 		checkpointStore: checkpointStore,
 		retryMetrics:    retry.NewRetryMetrics(),
+		storage:         store,
 	}
+
+	if store != nil {
+		log.Printf("[DAGExecutor] Persistent storage enabled")
+	}
+
+	return executor
 }
 
 // Execute runs the DAG to completion with dependency-aware parallel scheduling.
 func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID string) (*ExecutionResult, error) {
 	log.Printf("[Executor] Starting execution of graph %s with max %d workers", graph.ID, e.maxWorkers)
+
+	// Attach storage to graph if available
+	if e.storage != nil {
+		graph.SetStorage(e.storage)
+		
+		// Persist initial graph state
+		if err := e.persistInitialGraph(graph); err != nil {
+			log.Printf("[Executor] Warning: failed to persist initial graph: %v", err)
+		}
+	}
 
 	if err := graph.Validate(); err != nil {
 		return nil, fmt.Errorf("graph validation failed: %w", err)
@@ -440,4 +466,103 @@ func (e *DAGExecutor) extractFinalResult(graph *dag.Graph, nodeResults map[strin
 		Success:      false,
 		ErrorMessage: "No synthesizer output found",
 	}, nil
+}
+
+// RecoverGraph attempts to recover a graph from persistent storage.
+// Returns the recovered graph or nil if no recovery data exists.
+func (e *DAGExecutor) RecoverGraph(graphID string) (*dag.Graph, error) {
+	if e.storage == nil {
+		return nil, fmt.Errorf("no storage backend available")
+	}
+
+	log.Printf("[Executor] Attempting to recover graph %s from storage", graphID)
+
+	graph := dag.NewGraphWithStorage(graphID, e.storage)
+	if err := graph.LoadFromStorage(graphID); err != nil {
+		return nil, fmt.Errorf("failed to load graph from storage: %w", err)
+	}
+
+	log.Printf("[Executor] Successfully recovered graph %s with %d nodes (status: %s)", 
+		graphID, len(graph.Nodes), graph.Status)
+
+	return graph, nil
+}
+
+// persistInitialGraph saves the initial graph state to storage.
+func (e *DAGExecutor) persistInitialGraph(graph *dag.Graph) error {
+	if e.storage == nil {
+		return nil
+	}
+
+	// Save graph metadata
+	graphState := &storage.GraphState{
+		ID:       graph.ID,
+		Status:   string(graph.Status),
+		Metadata: graph.Metadata,
+	}
+	if err := e.storage.SaveGraph(graphState); err != nil {
+		return fmt.Errorf("failed to save graph: %w", err)
+	}
+
+	// Log graph creation to WAL
+	payload := &storage.CreateGraphPayload{
+		Graph: *graphState,
+	}
+	if err := e.storage.LogMutation(graph.ID, storage.MutationCreateGraph, payload); err != nil {
+		return fmt.Errorf("failed to log graph creation: %w", err)
+	}
+
+	// Save all nodes
+	for i := range graph.Nodes {
+		nodeState := &storage.NodeState{
+			NodeID:         graph.Nodes[i].ID,
+			Type:           graph.Nodes[i].Type,
+			Config:         graph.Nodes[i].Config,
+			Status:         string(graph.Nodes[i].Status),
+			RelevanceScore: graph.Nodes[i].RelevanceScore,
+			Depth:          graph.Nodes[i].Depth,
+			RetryCount:     graph.Nodes[i].RetryCount,
+			LastError:      graph.Nodes[i].LastError,
+		}
+		if err := e.storage.SaveNode(graph.ID, nodeState); err != nil {
+			return fmt.Errorf("failed to save node %s: %w", graph.Nodes[i].ID, err)
+		}
+
+		// Log node creation to WAL
+		addPayload := &storage.AddNodePayload{
+			Node: *nodeState,
+		}
+		if err := e.storage.LogMutation(graph.ID, storage.MutationAddNode, addPayload); err != nil {
+			log.Printf("[Executor] Warning: failed to log node creation: %v", err)
+		}
+	}
+
+	// Save all edges
+	for _, edge := range graph.Edges {
+		if err := e.storage.SaveEdge(graph.ID, edge.From, edge.To); err != nil {
+			return fmt.Errorf("failed to save edge %s->%s: %w", edge.From, edge.To, err)
+		}
+
+		// Log edge creation to WAL
+		edgePayload := &storage.AddEdgePayload{
+			From: edge.From,
+			To:   edge.To,
+		}
+		if err := e.storage.LogMutation(graph.ID, storage.MutationAddEdge, edgePayload); err != nil {
+			log.Printf("[Executor] Warning: failed to log edge creation: %v", err)
+		}
+	}
+
+	log.Printf("[Executor] Persisted initial graph %s with %d nodes and %d edges", 
+		graph.ID, len(graph.Nodes), len(graph.Edges))
+
+	return nil
+}
+
+// Close releases resources held by the executor.
+func (e *DAGExecutor) Close() error {
+	if e.storage != nil {
+		return e.storage.Close()
+	}
+	return nil
 }
