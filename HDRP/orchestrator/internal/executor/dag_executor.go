@@ -9,6 +9,7 @@ import (
 	"hdrp/internal/clients"
 	"hdrp/internal/concurrency"
 	"hdrp/internal/dag"
+	"hdrp/internal/retry"
 
 	pb "github.com/deepdag/hdrp/api/gen/services"
 )
@@ -20,16 +21,24 @@ type DAGExecutor struct {
 	config          *concurrency.Config
 	rateLimiters    *concurrency.RateLimiterManager
 	lockManager     *concurrency.LockManager
+	retryPolicy     *retry.RetryPolicy
+	circuitBreakers *retry.PerServiceBreakers
+	checkpointStore retry.CheckpointStore
+	retryMetrics    *retry.RetryMetrics
 	mu              sync.RWMutex
 }
 
 // ExecutionResult contains the final DAG execution outcome.
 type ExecutionResult struct {
-	GraphID      string
-	Success      bool
-	FinalReport  string
-	ArtifactURI  string
-	ErrorMessage string
+	GraphID        string
+	Success        bool
+	PartialSuccess bool              // True if some nodes succeeded but not all
+	SucceededNodes []string          // List of successful node IDs
+	FailedNodes    map[string]string // nodeID -> error message
+	FinalReport    string
+	ArtifactURI    string
+	ErrorMessage   string
+	RetryMetrics   *retry.RetryMetrics // Retry statistics
 }
 
 // NodeResult contains a single node's execution outcome.
@@ -56,12 +65,23 @@ func NewDAGExecutor(clients *clients.ServiceClients, maxWorkers int) *DAGExecuto
 		// Continue with nil lock manager - will skip distributed locking
 	}
 
+	// Initialize checkpoint store
+	checkpointStore, err := retry.NewFileCheckpointStore("./checkpoints")
+	if err != nil {
+		log.Printf("[DAGExecutor] Warning: failed to initialize checkpoint store: %v", err)
+		checkpointStore = retry.NewInMemoryCheckpointStore()
+	}
+
 	return &DAGExecutor{
-		clients:      clients,
-		maxWorkers:   maxWorkers,
-		config:       config,
-		rateLimiters: concurrency.NewRateLimiterManager(config),
-		lockManager:  lockManager,
+		clients:         clients,
+		maxWorkers:      maxWorkers,
+		config:          config,
+		rateLimiters:    concurrency.NewRateLimiterManager(config),
+		lockManager:     lockManager,
+		retryPolicy:     retry.DefaultPolicy(),
+		circuitBreakers: retry.NewPerServiceBreakers(),
+		checkpointStore: checkpointStore,
+		retryMetrics:    retry.NewRetryMetrics(),
 	}
 }
 
@@ -153,27 +173,60 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID strin
 			// No more work to schedule and nothing running
 			allDone := true
 			anyFailed := false
+			succeededNodes := []string{}
+			failedNodes := make(map[string]string)
 
 			for _, n := range graph.Nodes {
-				if n.Status == dag.StatusPending || n.Status == dag.StatusRunning || n.Status == dag.StatusBlocked {
+				if n.Status == dag.StatusPending || n.Status == dag.StatusRunning || n.Status == dag.StatusBlocked || n.Status == dag.StatusRetrying {
 					allDone = false
 					break
 				}
 				if n.Status == dag.StatusFailed {
 					anyFailed = true
+					failedNodes[n.ID] = n.LastError
+				} else if n.Status == dag.StatusSucceeded {
+					succeededNodes = append(succeededNodes, n.ID)
 				}
 			}
 
 			if allDone {
 				if anyFailed {
+					// Check for partial success
+					if len(succeededNodes) > 0 {
+						// Extract partial results
+						result, err := e.extractFinalResult(graph, nodeResults)
+						if err == nil && result != nil {
+							result.PartialSuccess = true
+							result.Success = false
+							result.SucceededNodes = succeededNodes
+							result.FailedNodes = failedNodes
+							result.ErrorMessage = fmt.Sprintf("%d nodes failed, %d succeeded", len(failedNodes), len(succeededNodes))
+							result.RetryMetrics = e.retryMetrics
+							log.Printf("[Executor] Graph completed with partial success: %d succeeded, %d failed", len(succeededNodes), len(failedNodes))
+							return result, nil
+						}
+					}
+					// Total failure
 					return &ExecutionResult{
-						GraphID:      graph.ID,
-						Success:      false,
-						ErrorMessage: "One or more nodes failed",
+						GraphID:        graph.ID,
+						Success:        false,
+						PartialSuccess: false,
+						SucceededNodes: succeededNodes,
+						FailedNodes:    failedNodes,
+						ErrorMessage:   fmt.Sprintf("All critical nodes failed: %d total failures", len(failedNodes)),
+						RetryMetrics:   e.retryMetrics,
 					}, nil
 				}
 
-				return e.extractFinalResult(graph, nodeResults)
+				// Full success
+				result, err := e.extractFinalResult(graph, nodeResults)
+				if err != nil {
+					return nil, err
+				}
+				result.SucceededNodes = succeededNodes
+				result.RetryMetrics = e.retryMetrics
+				log.Printf("[Executor] Graph completed successfully: %d nodes", len(succeededNodes))
+				return result, nil
 			}
 
 			// Deadlock detected: no work available but not all nodes completed
@@ -181,6 +234,7 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID strin
 				GraphID:      graph.ID,
 				Success:      false,
 				ErrorMessage: "Execution deadlocked: nodes are blocked",
+				RetryMetrics: e.retryMetrics,
 			}, nil
 		}
 	}
