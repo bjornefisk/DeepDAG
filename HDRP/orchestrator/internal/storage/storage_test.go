@@ -225,6 +225,11 @@ func TestSQLiteStorage_Recovery(t *testing.T) {
 		t.Fatalf("Failed to save graph: %v", err)
 	}
 
+	// Log graph creation
+	store.LogMutation(graphID, MutationCreateGraph, &CreateGraphPayload{
+		Graph: *graph,
+	})
+
 	// Add a node
 	node := &NodeState{
 		NodeID: "node-1",
@@ -235,6 +240,11 @@ func TestSQLiteStorage_Recovery(t *testing.T) {
 	if err := store.SaveNode(graphID, node); err != nil {
 		t.Fatalf("Failed to save node: %v", err)
 	}
+
+	// Add node to WAL as well so recovery knows it exists
+	store.LogMutation(graphID, MutationAddNode, &AddNodePayload{
+		Node: *node,
+	})
 
 	// Log some mutations
 	store.LogMutation(graphID, MutationUpdateGraphStatus, &UpdateGraphStatusPayload{
