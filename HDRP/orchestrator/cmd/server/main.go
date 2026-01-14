@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	_ "net/http/pprof"  // Enable pprof profiling endpoints
 	"os"
 	"os/signal"
 	"syscall"
@@ -210,6 +211,7 @@ func (s *Server) Start() error {
 	}
 
 	log.Printf("Orchestrator server starting on %s", addr)
+	log.Printf("Profiling endpoints available at http://localhost%s/debug/pprof/", addr)
 
 	// Graceful shutdown
 	go func() {
