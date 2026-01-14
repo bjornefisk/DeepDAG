@@ -10,8 +10,13 @@ import logging
 import sys
 import os
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
+# Add project root and gRPC gen path to sys.path
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+grpc_gen_path = os.path.join(root_path, "HDRP/api/gen/python/HDRP/api")
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
+if grpc_gen_path not in sys.path:
+    sys.path.insert(0, grpc_gen_path)
 
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2_grpc

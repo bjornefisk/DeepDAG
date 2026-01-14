@@ -9,7 +9,14 @@ import json
 import time
 import statistics
 from typing import List, Dict
+import sys
 from pathlib import Path
+
+# Add project root to sys.path to support running as a script from root
+root_dir = Path(__file__).resolve().parent.parent
+if str(root_dir) not in sys.path:
+    sys.path.insert(0, str(root_dir))
+
 from HDRP.orchestrated_runner import run_orchestrated_programmatic
 
 
