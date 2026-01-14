@@ -1,8 +1,6 @@
 package retry
 
 import (
-	"context"
-	"errors"
 	"testing"
 	"time"
 )

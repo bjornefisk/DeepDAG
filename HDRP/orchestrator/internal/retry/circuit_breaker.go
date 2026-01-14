@@ -116,9 +116,21 @@ func (cb *CircuitBreaker) RecordSuccess() {
 		}
 
 	case CircuitClosed:
-		// Check if we should reset counters to prevent stale data
-		if cb.failures+cb.successes >= cb.minRequests*2 {
-			cb.reset()
+		// Check if we should open the circuit
+		// (e.g., if we just reached minRequests)
+		cb.checkThreshold()
+	}
+}
+
+// checkThreshold evaluates the failure rate and opens the circuit if needed.
+// Must be called with lock held.
+func (cb *CircuitBreaker) checkThreshold() {
+	totalRequests := cb.failures + cb.successes
+	if totalRequests >= cb.minRequests {
+		failureRate := float64(cb.failures) / float64(totalRequests)
+		if failureRate >= cb.failureThreshold {
+			cb.state = CircuitOpen
+			cb.openedAt = time.Now()
 		}
 	}
 }
@@ -140,14 +152,7 @@ func (cb *CircuitBreaker) RecordFailure() {
 
 	case CircuitClosed:
 		// Check if we should open the circuit
-		totalRequests := cb.failures + cb.successes
-		if totalRequests >= cb.minRequests {
-			failureRate := float64(cb.failures) / float64(totalRequests)
-			if failureRate >= cb.failureThreshold {
-				cb.state = CircuitOpen
-				cb.openedAt = time.Now()
-			}
-		}
+		cb.checkThreshold()
 	}
 }
 
