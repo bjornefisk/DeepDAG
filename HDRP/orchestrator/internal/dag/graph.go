@@ -3,7 +3,10 @@ package dag
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strings"
+
+	"hdrp/internal/storage"
 )
 
 // Status represents the current execution state of a graph or node.
@@ -64,6 +67,9 @@ type Graph struct {
 	Edges    []Edge            `json:"edges"`
 	Status   Status            `json:"status"`
 	Metadata map[string]string `json:"metadata"`
+	
+	// Storage backend for persistence (nil for in-memory only)
+	storage storage.Storage `json:"-"`
 }
 
 // ValidationError represents an aggregation of validation issues.
@@ -202,8 +208,49 @@ func (g *Graph) handleEntityDiscovery(sig Signal) error {
 	}
 	g.Nodes = append(g.Nodes, newNode)
 
+	// Persist node
+	if err := g.persistNode(&newNode); err != nil {
+		return fmt.Errorf("failed to persist new node: %w", err)
+	}
+
+	// Log to WAL
+	if g.storage != nil {
+		payload := &storage.AddNodePayload{
+			Node: storage.NodeState{
+				NodeID:         newNode.ID,
+				Type:           newNode.Type,
+				Config:         newNode.Config,
+				Status:         string(newNode.Status),
+				RelevanceScore: newNode.RelevanceScore,
+				Depth:          newNode.Depth,
+				RetryCount:     newNode.RetryCount,
+				LastError:      newNode.LastError,
+			},
+		}
+		if err := g.storage.LogMutation(g.ID, storage.MutationAddNode, payload); err != nil {
+			log.Printf("[DAG] Warning: failed to log add node mutation: %v", err)
+		}
+	}
+
 	// Add edge
-	g.Edges = append(g.Edges, Edge{From: sig.Source, To: newNodeID})
+	newEdge := Edge{From: sig.Source, To: newNodeID}
+	g.Edges = append(g.Edges, newEdge)
+
+	// Persist edge
+	if err := g.persistEdge(sig.Source, newNodeID); err != nil {
+		return fmt.Errorf("failed to persist new edge: %w", err)
+	}
+
+	// Log to WAL
+	if g.storage != nil {
+		payload := &storage.AddEdgePayload{
+			From: sig.Source,
+			To:   newNodeID,
+		}
+		if err := g.storage.LogMutation(g.ID, storage.MutationAddEdge, payload); err != nil {
+			log.Printf("[DAG] Warning: failed to log add edge mutation: %v", err)
+		}
+	}
 
 	// Evaluate readiness
 	if err := g.EvaluateReadiness(); err != nil {
@@ -293,3 +340,114 @@ func checkDepth(nodes []Node, adj map[string][]string, limit int) error {
 	}
 	return nil
 }
+
+// NewGraphWithStorage creates a graph with a storage backend.
+// If store is nil, the graph operates in-memory only.
+func NewGraphWithStorage(id string, store storage.Storage) *Graph {
+	return &Graph{
+		ID:       id,
+		Nodes:    []Node{},
+		Edges:    []Edge{},
+		Status:   StatusCreated,
+		Metadata: make(map[string]string),
+		storage:  store,
+	}
+}
+
+// SetStorage attaches a storage backend to an existing graph.
+func (g *Graph) SetStorage(store storage.Storage) {
+	g.storage = store
+}
+
+// persistGraphState saves the graph metadata to storage if available.
+func (g *Graph) persistGraphState() error {
+	if g.storage == nil {
+		return nil // No persistence configured
+	}
+
+	graphState := &storage.GraphState{
+		ID:       g.ID,
+		Status:   string(g.Status),
+		Metadata: g.Metadata,
+	}
+
+	return g.storage.SaveGraph(graphState)
+}
+
+// persistNode saves a node to storage if available.
+func (g *Graph) persistNode(node *Node) error {
+	if g.storage == nil {
+		return nil
+	}
+
+	nodeState := &storage.NodeState{
+		NodeID:         node.ID,
+		Type:           node.Type,
+		Config:         node.Config,
+		Status:         string(node.Status),
+		RelevanceScore: node.RelevanceScore,
+		Depth:          node.Depth,
+		RetryCount:     node.RetryCount,
+		LastError:      node.LastError,
+	}
+
+	return g.storage.SaveNode(g.ID, nodeState)
+}
+
+// persistEdge saves an edge to storage if available.
+func (g *Graph) persistEdge(from, to string) error {
+	if g.storage == nil {
+		return nil
+	}
+
+	return g.storage.SaveEdge(g.ID, from, to)
+}
+
+// LoadFromStorage restores graph state from storage.
+func (g *Graph) LoadFromStorage(graphID string) error {
+	if g.storage == nil {
+		return fmt.Errorf("no storage backend configured")
+	}
+
+	// Try crash recovery first
+	recovered, err := g.storage.RecoverGraph(graphID)
+	if err != nil {
+		return fmt.Errorf("recovery failed: %w", err)
+	}
+
+	if recovered == nil {
+		return fmt.Errorf("no stored state found for graph %s", graphID)
+	}
+
+	// Restore graph metadata
+	g.ID = recovered.Graph.ID
+	g.Status = Status(recovered.Graph.Status)
+	g.Metadata = recovered.Graph.Metadata
+
+	// Restore nodes
+	g.Nodes = make([]Node, 0, len(recovered.Nodes))
+	for _, nodeState := range recovered.Nodes {
+		g.Nodes = append(g.Nodes, Node{
+			ID:             nodeState.NodeID,
+			Type:           nodeState.Type,
+			Config:         nodeState.Config,
+			Status:         Status(nodeState.Status),
+			RelevanceScore: nodeState.RelevanceScore,
+			Depth:          nodeState.Depth,
+			RetryCount:     nodeState.RetryCount,
+			LastError:      nodeState.LastError,
+		})
+	}
+
+	// Restore edges
+	g.Edges = make([]Edge, 0, len(recovered.Edges))
+	for _, edgeState := range recovered.Edges {
+		g.Edges = append(g.Edges, Edge{
+			From: edgeState.From,
+			To:   edgeState.To,
+		})
+	}
+
+	return nil
+}
+

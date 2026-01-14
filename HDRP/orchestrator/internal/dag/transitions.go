@@ -2,7 +2,10 @@ package dag
 
 import (
 	"fmt"
+	"log"
 	"sync"
+
+	"hdrp/internal/storage"
 )
 
 // StateMachine manages status transitions for a Graph or Node.
@@ -132,25 +135,79 @@ func (g *Graph) EvaluateReadiness() error {
 }
 
 // SetStatus is a helper for Graph to update its status and its nodes' statuses if necessary.
-// In a real system, this might involve database updates.
+// It persists the change to storage and logs to WAL for crash recovery.
 func (g *Graph) SetStatus(s Status) error {
 	// Simple validation for the graph level status
 	// For MVP, we'll just check if it's a valid target from current
+	oldStatus := g.Status
 	if !isValidTransition(g.Status, s) {
 		return fmt.Errorf("invalid graph status transition: %s -> %s", g.Status, s)
 	}
 	g.Status = s
+
+	// Persist to storage
+	if g.storage != nil {
+		if err := g.storage.UpdateGraphStatus(g.ID, string(s)); err != nil {
+			log.Printf("[DAG] Warning: failed to persist graph status: %v", err)
+		}
+
+		// Log to WAL
+		payload := &storage.UpdateGraphStatusPayload{
+			OldStatus: string(oldStatus),
+			NewStatus: string(s),
+		}
+		if err := g.storage.LogMutation(g.ID, storage.MutationUpdateGraphStatus, payload); err != nil {
+			log.Printf("[DAG] Warning: failed to log graph status mutation: %v", err)
+		}
+
+		// Check if we should create a snapshot
+		if should, err := g.storage.ShouldCreateSnapshot(g.ID); err == nil && should {
+			if err := g.storage.CreateSnapshot(g.ID); err != nil {
+				log.Printf("[DAG] Warning: failed to create snapshot: %v", err)
+			}
+		}
+	}
+
 	return nil
 }
 
 // SetNodeStatus updates a specific node's status.
+// It persists the change to storage and logs to WAL for crash recovery.
 func (g *Graph) SetNodeStatus(nodeID string, s Status) error {
 	for i := range g.Nodes {
 		if g.Nodes[i].ID == nodeID {
+			oldStatus := g.Nodes[i].Status
 			if !isValidTransition(g.Nodes[i].Status, s) {
 				return fmt.Errorf("invalid node status transition for %s: %s -> %s", nodeID, g.Nodes[i].Status, s)
 			}
 			g.Nodes[i].Status = s
+
+			// Persist to storage
+			if g.storage != nil {
+				if err := g.storage.UpdateNodeStatus(g.ID, nodeID, string(s), g.Nodes[i].RetryCount, g.Nodes[i].LastError); err != nil {
+					log.Printf("[DAG] Warning: failed to persist node status: %v", err)
+				}
+
+				// Log to WAL
+				payload := &storage.UpdateNodeStatusPayload{
+					NodeID:     nodeID,
+					OldStatus:  string(oldStatus),
+					NewStatus:  string(s),
+					RetryCount: g.Nodes[i].RetryCount,
+					LastError:  g.Nodes[i].LastError,
+				}
+				if err := g.storage.LogMutation(g.ID, storage.MutationUpdateNodeStatus, payload); err != nil {
+					log.Printf("[DAG] Warning: failed to log node status mutation: %v", err)
+				}
+
+				// Check if we should create a snapshot
+				if should, err := g.storage.ShouldCreateSnapshot(g.ID); err == nil && should {
+					if err := g.storage.CreateSnapshot(g.ID); err != nil {
+						log.Printf("[DAG] Warning: failed to create snapshot: %v", err)
+					}
+				}
+			}
+
 			return nil
 		}
 	}

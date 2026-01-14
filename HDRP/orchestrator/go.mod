@@ -7,6 +7,7 @@ toolchain go1.24.11
 require (
 	github.com/deepdag/hdrp/api/gen/services v0.0.0
 	github.com/google/uuid v1.6.0
+	github.com/mattn/go-sqlite3 v1.14.24
 	google.golang.org/grpc v1.78.0
 )
 
