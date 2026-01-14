@@ -172,10 +172,31 @@ def run_orchestrated(
         console.print("\n[yellow]Interrupted by user[/yellow]")
         return 1
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        import traceback
+        # Initialize Sentry if not already done
+        from HDRP.services.shared.errors import init_sentry, capture_exception, get_user_friendly_message
+        init_sentry()
+        
+        # Capture exception with context
+        capture_exception(
+            e,
+            run_id=os.getenv("HDRP_RUN_ID"),
+            service="orchestrator",
+            context={
+                "query": query,
+                "provider": provider,
+                "verbose": verbose
+            }
+        )
+        
+        # Show user-friendly message instead of stack trace
+        user_message = get_user_friendly_message(e)
+        console.print(f"[red]Error:[/red] {user_message}")
+        
+        # Only show stack trace in verbose mode
         if verbose:
+            import traceback
             traceback.print_exc()
+        
         return 1
     finally:
         # Cleanup: stop all services
@@ -344,12 +365,31 @@ def run_orchestrated_programmatic(
             "error": "",
         }
     
+    
     except Exception as e:
+        # Initialize Sentry and capture error
+        from HDRP.services.shared.errors import init_sentry, capture_exception, get_user_friendly_message
+        init_sentry()
+        
+        capture_exception(
+            e,
+            run_id=run_id,
+            service="orchestrator_programmatic",
+            context={
+                "query": query,
+                "provider": provider,
+                "verbose": verbose
+            }
+        )
+        
+        # Return user-friendly error message
+        user_message = get_user_friendly_message(e)
+        
         return {
             "success": False,
             "run_id": run_id or "",
             "report": "",
-            "error": str(e),
+            "error": user_message,
         }
     
     finally:
