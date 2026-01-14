@@ -54,10 +54,13 @@ func isValidTransition(current, target Status) bool {
 	case StatusPending:
 		return target == StatusRunning || target == StatusCancelled || target == StatusFailed
 	case StatusRunning:
-		return target == StatusSucceeded || target == StatusFailed || target == StatusCancelled
+		return target == StatusSucceeded || target == StatusFailed || target == StatusCancelled || target == StatusRetrying
 	case StatusFailed:
-		// Allow retries from failed to running or pending
-		return target == StatusRunning || target == StatusPending || target == StatusCancelled
+		// Allow retries from failed to retrying or cancelled
+		return target == StatusRetrying || target == StatusCancelled
+	case StatusRetrying:
+		// From retrying, can go back to running (retry attempt) or to failed (retries exhausted)
+		return target == StatusRunning || target == StatusFailed || target == StatusCancelled
 	case StatusCancelled:
 		// Cancelled is terminal for an execution attempt, but could be reset to Created
 		return target == StatusCreated
@@ -91,9 +94,18 @@ func (g *Graph) EvaluateReadiness() error {
 			continue
 		}
 
+		// Check if all parents have succeeded OR are in a retryable state
+		// This enables graceful degradation - children can proceed even if parent is retrying
 		allParentsSucceeded := true
+		hasRetryingParent := false
 		for _, parentID := range parents[n.ID] {
-			if nodeStatus[parentID] != StatusSucceeded {
+			parentStatus := nodeStatus[parentID]
+			if parentStatus == StatusRetrying {
+				hasRetryingParent = true
+				allParentsSucceeded = false
+				break
+			}
+			if parentStatus != StatusSucceeded {
 				allParentsSucceeded = false
 				break
 			}
@@ -102,6 +114,9 @@ func (g *Graph) EvaluateReadiness() error {
 		var targetStatus Status
 		if allParentsSucceeded {
 			targetStatus = StatusPending
+		} else if hasRetryingParent {
+			// Keep blocked while parent is retrying
+			targetStatus = StatusBlocked
 		} else {
 			targetStatus = StatusBlocked
 		}

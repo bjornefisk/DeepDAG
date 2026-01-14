@@ -16,6 +16,7 @@ const (
 	StatusBlocked   Status = "BLOCKED"
 	StatusSucceeded Status = "SUCCEEDED"
 	StatusFailed    Status = "FAILED"
+	StatusRetrying  Status = "RETRYING"  // Node is waiting to retry after failure
 	StatusCancelled Status = "CANCELLED"
 )
 
@@ -27,6 +28,8 @@ type Node struct {
 	Status         Status            `json:"status"`
 	RelevanceScore float64           `json:"relevance_score"`
 	Depth          int               `json:"depth"`
+	RetryCount     int               `json:"retry_count"`      // Number of retry attempts made
+	LastError      string            `json:"last_error,omitempty"` // Last error encountered
 }
 
 // Validate ensures the node represents a single, atomic unit of work.
