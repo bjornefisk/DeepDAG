@@ -1,4 +1,3 @@
-import os
 from typing import Any, Optional
 
 from .base import SearchProvider, SearchError
@@ -38,42 +37,35 @@ class SearchFactory:
         default_provider: str = "simulated",
         strict_mode: bool = False,
     ) -> SearchProvider:
-        """Create a provider based on environment variables.
+        """Create a provider based on centralized settings.
 
-        Environment variables:
-            HDRP_SEARCH_PROVIDER: which provider to use (\"simulated\", \"google\").
-            
-            Google:
-                GOOGLE_API_KEY: API key for Google Custom Search (required).
-                GOOGLE_CX: Custom Search Engine ID (required).
-                GOOGLE_TIMEOUT_SECONDS: HTTP timeout (float seconds).
-                GOOGLE_MAX_RESULTS: default max results per query (int).
+        Uses HDRP settings loaded from:
+        1. Environment variables (highest precedence)
+        2. Environment-specific YAML (config.{env}.yaml)
+        3. Base YAML (config.yaml)
         
         Args:
-            default_provider: Provider to use if HDRP_SEARCH_PROVIDER is not set.
+            default_provider: Provider to use if not configured.
             strict_mode: If True, raise errors on misconfiguration instead of
                         falling back to simulated provider.
         """
-        provider_type = os.getenv("HDRP_SEARCH_PROVIDER", default_provider).lower()
+        from HDRP.services.shared.settings import get_settings
+        
+        settings = get_settings()
+        provider_type = settings.search.provider or default_provider
 
         if provider_type == "google":
-            api_key = os.getenv("GOOGLE_API_KEY")
-            cx = os.getenv("GOOGLE_CX")
-            timeout_env = os.getenv("GOOGLE_TIMEOUT_SECONDS", "")
-            max_results_env = os.getenv("GOOGLE_MAX_RESULTS", "")
-
-            timeout_seconds: Optional[float]
-            default_max_results: Optional[int]
-
-            try:
-                timeout_seconds = float(timeout_env) if timeout_env else 8.0
-            except ValueError:
-                timeout_seconds = 8.0
-
-            try:
-                default_max_results = int(max_results_env) if max_results_env else None
-            except ValueError:
-                default_max_results = None
+            # Get Google-specific settings
+            google_config = settings.search.google
+            
+            # Extract API key (SecretStr)
+            api_key = None
+            if google_config.api_key:
+                api_key = google_config.api_key.get_secret_value()
+            
+            cx = google_config.cx
+            timeout_seconds = google_config.timeout_seconds
+            default_max_results = google_config.max_results
 
             try:
                 provider = SearchFactory.get_provider(
@@ -122,3 +114,4 @@ class SearchFactory:
 
         # Default: purely local, deterministic provider.
         return SearchFactory.get_provider("simulated")
+
