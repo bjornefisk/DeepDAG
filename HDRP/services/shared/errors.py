@@ -5,7 +5,6 @@ and Sentry integration with run_id context.
 """
 
 import logging
-import os
 import traceback
 from typing import Optional, Dict, Any, List
 import grpc
@@ -20,7 +19,7 @@ def init_sentry(dsn: Optional[str] = None):
     """Initialize Sentry SDK with configuration.
     
     Args:
-        dsn: Sentry DSN. If not provided, reads from SENTRY_DSN env var.
+        dsn: Sentry DSN. If not provided, reads from centralized settings.
     """
     global _sentry_initialized
     
@@ -29,17 +28,24 @@ def init_sentry(dsn: Optional[str] = None):
     
     try:
         import sentry_sdk
+        from HDRP.services.shared.settings import get_settings
         
-        dsn = dsn or os.getenv("SENTRY_DSN")
-        if not dsn:
+        settings = get_settings()
+        
+        # Get DSN from parameter, settings, or skip if not configured
+        effective_dsn = dsn
+        if not effective_dsn and settings.observability.sentry.dsn:
+            effective_dsn = settings.observability.sentry.dsn.get_secret_value()
+        
+        if not effective_dsn:
             logger.info("Sentry DSN not configured, error tracking disabled")
             return
         
         sentry_sdk.init(
-            dsn=dsn,
-            traces_sample_rate=0.1,
+            dsn=effective_dsn,
+            traces_sample_rate=settings.observability.sentry.traces_sample_rate,
             profiles_sample_rate=0.1,
-            environment=os.getenv("HDRP_ENV", "development"),
+            environment=settings.observability.sentry.environment,
         )
         
         _sentry_initialized = True
