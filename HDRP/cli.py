@@ -34,11 +34,13 @@ from HDRP.services.synthesizer.service import SynthesizerService
 from HDRP.services.shared.logger import ResearchLogger
 
 
-app = typer.Typer(help="HDRP research CLI")
 console = Console()
 
 # Path to artifacts directory
 ARTIFACTS_DIR = Path(__file__).parent / "artifacts"
+
+# Create app with run as the default callback
+app = typer.Typer(help="HDRP research CLI")
 
 
 def _save_report_artifacts(run_id: str, query: str, report: str, claims: list, critique_results: list):
@@ -251,8 +253,11 @@ def _run_pipeline(
     return 0
 
 
-@app.command()
+
+
+@app.callback(invoke_without_command=True)
 def run(
+    ctx: typer.Context,
     query: str = typer.Option(
         ...,
         "--query",
@@ -294,6 +299,10 @@ def run(
     ),
 ) -> None:
     """Run a single HDRP research query."""
+    # Only execute if no subcommand was invoked
+    if ctx.invoked_subcommand is not None:
+        return
+    
     provider_display = provider or "auto"
     mode_display = mode.upper()
     
