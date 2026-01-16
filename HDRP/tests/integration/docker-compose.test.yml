@@ -1,0 +1,156 @@
+version: '3.8'
+
+# Docker Compose configuration for HDRP integration testing
+# Runs all services in isolated containers for deterministic testing
+
+services:
+  # Python gRPC Services
+  researcher:
+    build:
+      context: ../../..
+      dockerfile: HDRP/tests/integration/Dockerfile.python
+    image: hdrp-test-python:latest
+    container_name: hdrp-test-researcher
+    command: python3 HDRP/services/researcher/researcher_server.py --port 50052
+    ports:
+      - "50052:50052"
+    environment:
+      - HDRP_SEARCH_PROVIDER=simulated
+      - PYTHONUNBUFFERED=1
+    networks:
+      - hdrp-test-net
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 50052)); s.close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  critic:
+    build:
+      context: ../../..
+      dockerfile: HDRP/tests/integration/Dockerfile.python
+    image: hdrp-test-python:latest
+    container_name: hdrp-test-critic
+    command: python3 HDRP/services/critic/critic_server.py --port 50053
+    ports:
+      - "50053:50053"
+    environment:
+      - HDRP_SEARCH_PROVIDER=simulated
+      - PYTHONUNBUFFERED=1
+    networks:
+      - hdrp-test-net
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 50053)); s.close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  synthesizer:
+    build:
+      context: ../../..
+      dockerfile: HDRP/tests/integration/Dockerfile.python
+    image: hdrp-test-python:latest
+    container_name: hdrp-test-synthesizer
+    command: python3 HDRP/services/synthesizer/synthesizer_server.py --port 50054
+    ports:
+      - "50054:50054"
+    environment:
+      - HDRP_SEARCH_PROVIDER=simulated
+      - PYTHONUNBUFFERED=1
+    networks:
+      - hdrp-test-net
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 50054)); s.close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  principal:
+    build:
+      context: ../../..
+      dockerfile: HDRP/tests/integration/Dockerfile.python
+    image: hdrp-test-python:latest
+    container_name: hdrp-test-principal
+    command: python3 HDRP/services/principal/principal_server.py --port 50051
+    ports:
+      - "50051:50051"
+    environment:
+      - HDRP_SEARCH_PROVIDER=simulated
+      - PYTHONUNBUFFERED=1
+    networks:
+      - hdrp-test-net
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 50051)); s.close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # Go Orchestrator Service
+  orchestrator:
+    build:
+      context: ../../..
+      dockerfile: HDRP/tests/integration/Dockerfile.go
+    image: hdrp-test-orchestrator:latest
+    container_name: hdrp-test-orchestrator
+    command: ["/app/orchestrator/server", "-port", "50055"]
+    ports:
+      - "50055:50055"
+    environment:
+      - RESEARCHER_ADDRESS=researcher:50052
+      - CRITIC_ADDRESS=critic:50053
+      - SYNTHESIZER_ADDRESS=synthesizer:50054
+      - PRINCIPAL_ADDRESS=principal:50051
+    depends_on:
+      researcher:
+        condition: service_healthy
+      critic:
+        condition: service_healthy
+      synthesizer:
+        condition: service_healthy
+      principal:
+        condition: service_healthy
+    networks:
+      - hdrp-test-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:50055/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Test Runner
+  test-runner:
+    build:
+      context: ../../..
+      dockerfile: HDRP/tests/integration/Dockerfile.python
+    image: hdrp-test-python:latest
+    container_name: hdrp-test-runner
+    command: pytest HDRP/tests/integration/ -v --timeout=30 --tb=short
+    environment:
+      - HDRP_SEARCH_PROVIDER=simulated
+      - PYTHONUNBUFFERED=1
+      - PYTEST_CURRENT_TEST=1
+    depends_on:
+      researcher:
+        condition: service_healthy
+      critic:
+        condition: service_healthy
+      synthesizer:
+        condition: service_healthy
+      orchestrator:
+        condition: service_healthy
+    networks:
+      - hdrp-test-net
+    volumes:
+      - test-artifacts:/tmp/hdrp-test-artifacts
+
+networks:
+  hdrp-test-net:
+    driver: bridge
+
+volumes:
+  test-artifacts:
