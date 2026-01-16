@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"hdrp/internal/clients"
+	"hdrp/internal/config"
 	"hdrp/internal/dag"
 	"hdrp/internal/executor"
 
@@ -47,32 +48,24 @@ type Server struct {
 	port     int
 }
 
-func NewServer(port int) (*Server, error) {
-	config := clients.DefaultServiceConfig()
-	
-	// Override defaults with environment variables.
-	if addr := os.Getenv("HDRP_PRINCIPAL_ADDR"); addr != "" {
-		config.PrincipalAddr = addr
-	}
-	if addr := os.Getenv("HDRP_RESEARCHER_ADDR"); addr != "" {
-		config.ResearcherAddr = addr
-	}
-	if addr := os.Getenv("HDRP_CRITIC_ADDR"); addr != "" {
-		config.CriticAddr = addr
-	}
-	if addr := os.Getenv("HDRP_SYNTHESIZER_ADDR"); addr != "" {
-		config.SynthesizerAddr = addr
-	}
+func NewServer(cfg *config.Config, port int) (*Server, error) {
+	// Use addresses from centralized config
+	svcConfig := clients.DefaultServiceConfig()
+	svcConfig.PrincipalAddr = cfg.Services.Principal.Address
+	svcConfig.ResearcherAddr = cfg.Services.Researcher.Address
+	svcConfig.CriticAddr = cfg.Services.Critic.Address
+	svcConfig.SynthesizerAddr = cfg.Services.Synthesizer.Address
 
 	log.Printf("Connecting to services: Principal=%s, Researcher=%s, Critic=%s, Synthesizer=%s",
-		config.PrincipalAddr, config.ResearcherAddr, config.CriticAddr, config.SynthesizerAddr)
+		svcConfig.PrincipalAddr, svcConfig.ResearcherAddr, svcConfig.CriticAddr, svcConfig.SynthesizerAddr)
 
-	clients, err := clients.NewServiceClients(config)
+	clients, err := clients.NewServiceClients(svcConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize service clients: %w", err)
 	}
 
-	exec := executor.NewDAGExecutor(clients, 4)
+	// Use max workers from config
+	exec := executor.NewDAGExecutor(clients, cfg.Concurrency.MaxWorkers)
 
 	return &Server{
 		clients:  clients,
@@ -266,9 +259,18 @@ func convertProtoGraph(pbGraph *pb.Graph) *dag.Graph {
 
 func main() {
 	port := flag.Int("port", 50055, "Orchestrator server port")
+	configPath := flag.String("config", "", "Path to config file (default: ../config/config.yaml)")
 	flag.Parse()
 
-	server, err := NewServer(*port)
+	// Load configuration
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	log.Printf("Loaded configuration for environment: %s", cfg.Environment)
+
+	server, err := NewServer(cfg, *port)
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}
