@@ -23,6 +23,7 @@ from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2_grpc
 from HDRP.services.researcher.service import ResearcherService
 from HDRP.tools.search.factory import SearchFactory
+from HDRP.services.shared.telemetry import init_telemetry, trace_rpc, add_span_attributes
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ class ResearcherServicer(hdrp_services_pb2_grpc.ResearcherServiceServicer):
         self.search_provider = SearchFactory.from_env()
         logger.info(f"Initialized search provider: {type(self.search_provider).__name__}")
     
+    @trace_rpc("Research")
     def Research(self, request, context):
         """Executes research on a query and returns atomic claims.
         
@@ -98,6 +100,13 @@ class ResearcherServicer(hdrp_services_pb2_grpc.ResearcherServiceServicer):
             
             logger.info(f"Research completed: {len(pb_claims)} claims extracted")
             
+            # Add span attributes for tracing
+            add_span_attributes(
+                claims_extracted=len(pb_claims),
+                total_sources=len(set(c.source_url for c in claims)),
+                query_length=len(query)
+            )
+            
             return hdrp_services_pb2.ResearchResponse(
                 claims=pb_claims,
                 total_sources=len(set(c.source_url for c in claims))
@@ -138,8 +147,17 @@ class ResearcherServicer(hdrp_services_pb2_grpc.ResearcherServiceServicer):
 
 
 
-def serve(port: int = 50052):
+def serve(port: int = 50052, enable_tracing: bool = False, otlp_endpoint: Optional[str] = None):
     """Starts the Researcher gRPC server."""
+    # Initialize telemetry
+    if enable_tracing:
+        init_telemetry(
+            service_name="researcher",
+            otlp_endpoint=otlp_endpoint,
+            metrics_port=9091
+        )
+        logger.info("Telemetry initialized for researcher service")
+    
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     hdrp_services_pb2_grpc.add_ResearcherServiceServicer_to_server(
         ResearcherServicer(), server
@@ -150,6 +168,8 @@ def serve(port: int = 50052):
     server.start()
     
     logger.info(f"Researcher Service started on {address}")
+    if enable_tracing:
+        logger.info("Prometheus metrics available on port 9091")
     
     try:
         server.wait_for_termination()
@@ -163,6 +183,8 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description='Researcher Service gRPC Server')
     parser.add_argument('--port', type=int, default=50052, help='Server port')
+    parser.add_argument('--enable-tracing', action='store_true', help='Enable OpenTelemetry tracing')
+    parser.add_argument('--otlp-endpoint', type=str, default=None, help='OTLP endpoint for traces')
     args = parser.parse_args()
     
-    serve(args.port)
+    serve(args.port, args.enable_tracing, args.otlp_endpoint)

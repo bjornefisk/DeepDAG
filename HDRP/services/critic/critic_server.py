@@ -22,6 +22,7 @@ from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2_grpc
 from HDRP.services.critic.service import CriticService
 from HDRP.services.shared.claims import AtomicClaim
+from HDRP.services.shared.telemetry import init_telemetry, trace_rpc, add_span_attributes
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 class CriticServicer(hdrp_services_pb2_grpc.CriticServiceServicer):
     """Implements CriticService gRPC interface."""
     
+    @trace_rpc("Verify")
     def Verify(self, request, context):
         """Verifies claims against source text and task relevance.
         
@@ -129,6 +131,13 @@ class CriticServicer(hdrp_services_pb2_grpc.CriticServiceServicer):
             
             logger.info(f"Verification completed: verified={verified_count}, rejected={rejected_count}")
             
+            # Add span attributes
+            add_span_attributes(
+                claims_total=len(request.claims),
+                verified_count=verified_count,
+                rejected_count=rejected_count
+            )
+            
             return hdrp_services_pb2.VerifyResponse(
                 results=pb_results,
                 verified_count=verified_count,
@@ -181,8 +190,16 @@ class CriticServicer(hdrp_services_pb2_grpc.CriticServiceServicer):
 
 
 
-def serve(port: int = 50053):
+def serve(port: int = 50053, enable_tracing: bool = False, otlp_endpoint: str = None):
     """Starts the Critic gRPC server."""
+    if enable_tracing:
+        init_telemetry(
+            service_name="critic",
+            otlp_endpoint=otlp_endpoint,
+            metrics_port=9092
+        )
+        logger.info("Telemetry initialized for critic service")
+    
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     hdrp_services_pb2_grpc.add_CriticServiceServicer_to_server(
         CriticServicer(), server
@@ -193,6 +210,8 @@ def serve(port: int = 50053):
     server.start()
     
     logger.info(f"Critic Service started on {address}")
+    if enable_tracing:
+        logger.info("Prometheus metrics available on port 9092")
     
     try:
         server.wait_for_termination()
@@ -206,6 +225,8 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description='Critic Service gRPC Server')
     parser.add_argument('--port', type=int, default=50053, help='Server port')
+    parser.add_argument('--enable-tracing', action='store_true', help='Enable OpenTelemetry tracing')
+    parser.add_argument('--otlp-endpoint', type=str, default=None, help='OTLP endpoint for traces')
     args = parser.parse_args()
     
-    serve(args.port)
+    serve(args.port, args.enable_tracing, args.otlp_endpoint)

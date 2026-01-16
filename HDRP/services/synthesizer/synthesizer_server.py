@@ -22,6 +22,7 @@ from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2_grpc
 from HDRP.services.synthesizer.service import SynthesizerService
 from HDRP.services.shared.claims import AtomicClaim, CritiqueResult
+from HDRP.services.shared.telemetry import init_telemetry, trace_rpc, add_span_attributes
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class SynthesizerServicer(hdrp_services_pb2_grpc.SynthesizerServiceServicer):
     def __init__(self):
         self.synthesizer = SynthesizerService()
     
+    @trace_rpc("Synthesize")
     def Synthesize(self, request, context):
         """Synthesizes verified claims into a markdown report.
         
@@ -103,6 +105,12 @@ class SynthesizerServicer(hdrp_services_pb2_grpc.SynthesizerServiceServicer):
             
             logger.info(f"Synthesis completed: report length={len(report)} chars")
             
+            # Add span attributes
+            add_span_attributes(
+                report_length=len(report),
+                verification_results_count=len(request.verification_results)
+            )
+            
             # For MVP, artifact_uri is empty (could be extended to save to file)
             return hdrp_services_pb2.SynthesizeResponse(
                 report=report,
@@ -153,8 +161,16 @@ class SynthesizerServicer(hdrp_services_pb2_grpc.SynthesizerServiceServicer):
 
 
 
-def serve(port: int = 50054):
+def serve(port: int = 50054, enable_tracing: bool = False, otlp_endpoint: str = None):
     """Starts the Synthesizer gRPC server."""
+    if enable_tracing:
+        init_telemetry(
+            service_name="synthesizer",
+            otlp_endpoint=otlp_endpoint,
+            metrics_port=9093
+        )
+        logger.info("Telemetry initialized for synthesizer service")
+    
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     hdrp_services_pb2_grpc.add_SynthesizerServiceServicer_to_server(
         SynthesizerServicer(), server
@@ -165,6 +181,8 @@ def serve(port: int = 50054):
     server.start()
     
     logger.info(f"Synthesizer Service started on {address}")
+    if enable_tracing:
+        logger.info("Prometheus metrics available on port 9093")
     
     try:
         server.wait_for_termination()
@@ -178,6 +196,8 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description='Synthesizer Service gRPC Server')
     parser.add_argument('--port', type=int, default=50054, help='Server port')
+    parser.add_argument('--enable-tracing', action='store_true', help='Enable OpenTelemetry tracing')
+    parser.add_argument('--otlp-endpoint', type=str, default=None, help='OTLP endpoint for traces')
     args = parser.parse_args()
     
-    serve(args.port)
+    serve(args.port, args.enable_tracing, args.otlp_endpoint)
