@@ -1,0 +1,103 @@
+# HDRP Configuration
+# Base configuration with sensible defaults
+# Override with environment-specific configs (config.dev.yaml, config.staging.yaml, config.prod.yaml)
+# or via environment variables (e.g., HDRP_SEARCH_PROVIDER=google)
+
+# Environment designation
+environment: development
+
+# Search Provider Configuration
+search:
+  # Provider type: simulated, google, tavily
+  provider: simulated
+  
+  # Google Custom Search settings
+  google:
+    api_key: ""  # Set via GOOGLE_API_KEY env var or secret manager
+    cx: ""       # Set via GOOGLE_CX env var or secret manager
+    timeout_seconds: 8.0
+    max_results: 10
+  
+  # Tavily Search settings
+  tavily:
+    api_key: ""  # Set via TAVILY_API_KEY env var or secret manager
+    search_depth: basic
+    topic: general
+    timeout_seconds: 8.0
+    max_results: 10
+
+# Service Discovery (gRPC addresses)
+services:
+  principal:
+    address: localhost:50051
+  researcher:
+    address: localhost:50052
+  critic:
+    address: localhost:50053
+  synthesizer:
+    address: localhost:50054
+
+# Concurrency & Performance
+concurrency:
+  max_workers: 10
+  rate_limits:
+    researcher: 5
+    critic: 3
+    synthesizer: 2
+  
+  # Distributed locking (for multi-instance deployments)
+  lock:
+    provider: none  # Options: none, etcd, redis
+    etcd:
+      endpoints: localhost:2379
+    redis:
+      address: localhost:6379
+    timeout_seconds: 30
+  
+  # Execution timeouts
+  timeouts:
+    node_execution_minutes: 5
+    lock_seconds: 30
+
+# Storage Configuration
+storage:
+  database:
+    path: ./hdrp.db
+  logs:
+    directory: ./logs
+  artifacts:
+    directory: ./artifacts
+
+# Observability
+observability:
+  # Sentry error tracking
+  sentry:
+    dsn: ""  # Set via SENTRY_DSN env var or secret manager
+    traces_sample_rate: 0.1
+    environment: development
+  
+  # Performance profiling
+  profiling:
+    enabled: false
+    output_directory: ./profiling_data
+  
+  # Logging
+  logging:
+    level: INFO
+    format: json
+
+# Secret Management
+secrets:
+  # Provider: environment, aws_secrets_manager, vault
+  provider: environment
+  
+  # AWS Secrets Manager configuration
+  aws:
+    region: us-west-2
+    secret_name_prefix: hdrp/
+  
+  # HashiCorp Vault configuration
+  vault:
+    address: http://localhost:8200
+    token: ""  # Set via VAULT_TOKEN env var
+    mount_path: secret/hdrp
