@@ -1,0 +1,67 @@
+# Staging Environment Configuration
+# Overrides for staging/pre-production testing
+
+environment: staging
+
+# Use real search providers with test credentials
+search:
+  provider: google
+  google:
+    # Set via environment variables or secret manager
+    timeout_seconds: 10.0
+    max_results: 15
+
+# External service addresses (adjust for your staging infrastructure)
+services:
+  principal:
+    address: staging-principal:50051
+  researcher:
+    address: staging-researcher:50052
+  critic:
+    address: staging-critic:50053
+  synthesizer:
+    address: staging-synthesizer:50054
+
+# Moderate concurrency for realistic testing
+concurrency:
+  max_workers: 8
+  rate_limits:
+    researcher: 4
+    critic: 3
+    synthesizer: 2
+  
+  # Enable distributed locking for multi-instance testing
+  lock:
+    provider: redis
+    redis:
+      address: staging-redis:6379
+
+# Staging storage with separate database
+storage:
+  database:
+    path: /var/lib/hdrp/staging.db
+  logs:
+    directory: /var/log/hdrp/staging
+  artifacts:
+    directory: /var/lib/hdrp/artifacts/staging
+
+# Staging observability with Sentry enabled
+observability:
+  sentry:
+    # Set DSN via environment variable or secret manager
+    traces_sample_rate: 0.5
+    environment: staging
+  
+  profiling:
+    enabled: false
+  
+  logging:
+    level: INFO
+    format: json
+
+# AWS Secrets Manager for staging
+secrets:
+  provider: aws_secrets_manager
+  aws:
+    region: us-west-2
+    secret_name_prefix: hdrp/staging/

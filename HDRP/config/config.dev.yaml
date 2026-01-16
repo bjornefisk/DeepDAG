@@ -1,0 +1,54 @@
+# Development Environment Configuration
+# Overrides for local development
+
+environment: development
+
+# Use simulated search provider for fast, deterministic testing
+search:
+  provider: simulated
+
+# Local service addresses
+services:
+  principal:
+    address: localhost:50051
+  researcher:
+    address: localhost:50052
+  critic:
+    address: localhost:50053
+  synthesizer:
+    address: localhost:50054
+
+# Conservative concurrency for debugging
+concurrency:
+  max_workers: 4
+  rate_limits:
+    researcher: 3
+    critic: 2
+    synthesizer: 1
+
+# Local storage
+storage:
+  database:
+    path: ./hdrp_dev.db
+  logs:
+    directory: ./logs/dev
+  artifacts:
+    directory: ./artifacts/dev
+
+# Development observability
+observability:
+  sentry:
+    dsn: ""  # Typically disabled in dev
+    environment: development
+  
+  profiling:
+    enabled: true
+    output_directory: ./profiling_data
+  
+  logging:
+    level: DEBUG
+    format: text  # More readable for local development
+
+# Environment variables for secrets in dev
+secrets:
+  provider: environment

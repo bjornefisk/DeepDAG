@@ -1,0 +1,72 @@
+# Production Environment Configuration
+# Overrides for production deployment
+
+environment: production
+
+# Production search provider
+search:
+  provider: google
+  google:
+    # Secrets managed via AWS Secrets Manager
+    timeout_seconds: 12.0
+    max_results: 20
+
+# Production service addresses (use internal DNS or service mesh)
+services:
+  principal:
+    address: principal-svc.hdrp.svc.cluster.local:50051
+  researcher:
+    address: researcher-svc.hdrp.svc.cluster.local:50052
+  critic:
+    address: critic-svc.hdrp.svc.cluster.local:50053
+  synthesizer:
+    address: synthesizer-svc.hdrp.svc.cluster.local:50054
+
+# Production-grade concurrency
+concurrency:
+  max_workers: 20
+  rate_limits:
+    researcher: 10
+    critic: 6
+    synthesizer: 4
+  
+  # Distributed locking with etcd for high availability
+  lock:
+    provider: etcd
+    etcd:
+      endpoints: etcd-cluster.hdrp.svc.cluster.local:2379
+    timeout_seconds: 60
+  
+  timeouts:
+    node_execution_minutes: 10
+    lock_seconds: 60
+
+# Production storage with persistent volumes
+storage:
+  database:
+    path: /var/lib/hdrp/production.db
+  logs:
+    directory: /var/log/hdrp/production
+  artifacts:
+    directory: /var/lib/hdrp/artifacts/production
+
+# Production observability with full Sentry integration
+observability:
+  sentry:
+    # DSN from AWS Secrets Manager
+    traces_sample_rate: 0.1
+    environment: production
+  
+  profiling:
+    enabled: false
+  
+  logging:
+    level: WARNING  # Reduce noise in production
+    format: json
+
+# AWS Secrets Manager for production secrets
+secrets:
+  provider: aws_secrets_manager
+  aws:
+    region: us-east-1
+    secret_name_prefix: hdrp/production/
