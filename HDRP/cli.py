@@ -124,8 +124,13 @@ def _build_search_provider(
         return SearchFactory.from_env()
 
     if provider == "google":
-        # Explicit key wins; otherwise rely on environment.
-        effective_key = api_key or os.getenv("GOOGLE_API_KEY")
+        # Explicit key wins; otherwise rely on settings
+        effective_key = api_key
+        if not effective_key:
+            from HDRP.services.shared.settings import get_settings
+            settings = get_settings()
+            if settings.search.google.api_key:
+                effective_key = settings.search.google.api_key.get_secret_value()
         return SearchFactory.get_provider("google", api_key=effective_key)
 
     if provider == "simulated":
