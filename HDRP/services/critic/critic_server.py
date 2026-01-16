@@ -10,8 +10,13 @@ import logging
 import sys
 import os
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
+# Add project root and gRPC gen path to sys.path
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+grpc_gen_path = os.path.join(root_path, "HDRP/api/gen/python/HDRP/api")
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
+if grpc_gen_path not in sys.path:
+    sys.path.insert(0, grpc_gen_path)
 
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2_grpc
@@ -35,6 +40,10 @@ class CriticServicer(hdrp_services_pb2_grpc.CriticServiceServicer):
         Returns:
             VerifyResponse with verification results.
         """
+        from HDRP.services.shared.errors import (
+            handle_rpc_error, CriticError
+        )
+        
         try:
             # Validate request
             if not request.claims:
@@ -85,7 +94,7 @@ class CriticServicer(hdrp_services_pb2_grpc.CriticServiceServicer):
             # Create critic service instance
             critic = CriticService(run_id=run_id)
             
-            # Verify claims
+            # Verify claims with error handling
             critique_results = critic.verify(claims, task=task)
             
             # Convert CritiqueResult objects to protobuf messages
@@ -128,8 +137,10 @@ class CriticServicer(hdrp_services_pb2_grpc.CriticServiceServicer):
         
         except ValueError as e:
             logger.error(f"Validation error: {e}")
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(f'Invalid input: {str(e)}')
+            handle_rpc_error(
+                e, context, run_id=request.run_id, service="critic",
+                additional_context={"task": request.task, "claim_count": len(request.claims)}
+            )
             return hdrp_services_pb2.VerifyResponse(
                 results=[],
                 verified_count=0,
@@ -138,8 +149,10 @@ class CriticServicer(hdrp_services_pb2_grpc.CriticServiceServicer):
         
         except TimeoutError as e:
             logger.error(f"Timeout error: {e}")
-            context.set_code(grpc.StatusCode.DEADLINE_EXCEEDED)
-            context.set_details(f'Request processing exceeded deadline: {str(e)}')
+            handle_rpc_error(
+                e, context, run_id=request.run_id, service="critic",
+                additional_context={"task": request.task}
+            )
             return hdrp_services_pb2.VerifyResponse(
                 results=[],
                 verified_count=0,
@@ -147,14 +160,25 @@ class CriticServicer(hdrp_services_pb2_grpc.CriticServiceServicer):
             )
             
         except Exception as e:
+            # Graceful degradation: return empty verification results
             logger.error(f"Verification failed: {e}", exc_info=True)
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Internal error: {str(e)}")
+            
+            wrapped = CriticError(
+                str(e),
+                user_message="Unable to verify claims. Continuing with unverified results."
+            )
+            handle_rpc_error(
+                wrapped, context, run_id=request.run_id, service="critic",
+                additional_context={"task": request.task, "claim_count": len(request.claims)}
+            )
+            
+            # Return empty results instead of failing
             return hdrp_services_pb2.VerifyResponse(
                 results=[],
                 verified_count=0,
                 rejected_count=0
             )
+
 
 
 def serve(port: int = 50053):

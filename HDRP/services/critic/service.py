@@ -1,7 +1,9 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Tuple
+from concurrent.futures import ThreadPoolExecutor
 from HDRP.services.shared.claims import AtomicClaim, CritiqueResult
 from HDRP.services.shared.logger import ResearchLogger
 from HDRP.services.shared.errors import CriticError, report_error
+from HDRP.services.shared.profiling_utils import profile_block, enable_profiling_env
 from datetime import datetime
 
 class CriticService:
@@ -10,9 +12,14 @@ class CriticService:
     It ensures that every claim has a valid source URL and supporting text, 
     and (in production) would use an LLM to verify the semantic alignment 
     between the statement and the support text.
+    
+    Optimized with batch verification and tokenization caching.
     """
     def __init__(self, run_id: Optional[str] = None):
         self.logger = ResearchLogger("critic", run_id=run_id)
+        self.enable_profiling = enable_profiling_env()
+        self._tokenization_cache: Dict[str, List[str]] = {}
+        self._executor = ThreadPoolExecutor(max_workers=4)
     
     def verify(self, claims: List[AtomicClaim], task: str) -> List[CritiqueResult]:
         """Verify claims with balanced precision/recall using query decomposition logic.
@@ -313,10 +320,20 @@ class CriticService:
             return False
 
     def _tokenize(self, text: str) -> List[str]:
-        """Tokenize: strip punctuation and split."""
+        """Tokenize: strip punctuation and split (with caching)."""
+        # Check cache first
+        if text in self._tokenization_cache:
+            return self._tokenization_cache[text]
+        
         import re
         clean_text = re.sub(r'[^\w\s]', ' ', text)
-        return clean_text.split()
+        tokens = clean_text.split()
+        
+        # Cache result (limit cache size)
+        if len(self._tokenization_cache) < 1000:
+            self._tokenization_cache[text] = tokens
+        
+        return tokens
     
     def _extract_key_terms(self, text: str, stop_words: set) -> set:
         """Extract meaningful terms (≥3 chars, non-stop words)."""
@@ -363,3 +380,38 @@ class CriticService:
             return "factual"
         else:
             return "mixed"
+    
+    def verify_batch(self, claim_batches: List[Tuple[List[AtomicClaim], str]]) -> List[List[CritiqueResult]]:
+        """Verify multiple batches of claims concurrently.
+        
+        Args:
+            claim_batches: List of (claims, task) tuples
+            
+        Returns:
+            List of verification results for each batch
+        """
+        def verify_single_batch(batch):
+            claims, task = batch
+            return self.verify(claims, task)
+        
+        # Process batches concurrently
+        futures = [self._executor.submit(verify_single_batch, batch) for batch in claim_batches]
+        results = []
+        
+        for future in futures:
+            try:
+                result = future.result(timeout=30)
+                results.append(result)
+            except Exception as e:
+                self.logger.log("batch_verification_error", {
+                    "error": str(e),
+                    "type": type(e).__name__
+                })
+                results.append([])
+        
+        return results
+    
+    def __del__(self):
+        """Cleanup thread pool on deletion."""
+        if hasattr(self, '_executor'):
+            self._executor.shutdown(wait=False)

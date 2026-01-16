@@ -130,19 +130,21 @@ dmypy.json
 .DS_Store
 Thumbs.db
 
-# Logs (uncomment if you want to ignore logs)
+# Logs
 logs/
 *.jsonl
-!web-ui/src/lib/
+HDRP/logs/*
+!HDRP/logs/.gitkeep
 
-# HDRP Artifacts - ignore generated files but keep folder structure
+# HDRP Artifacts & Results
 HDRP/artifacts/*
 !HDRP/artifacts/.gitkeep
 !HDRP/artifacts/README.md
+results.json
 
-# HDRP Logs
-HDRP/logs/*
-!HDRP/logs/.gitkeep
+# Databases & Persistence
+data/
+checkpoints/
 
 # Go Orchestrator Binaries
 HDRP/orchestrator/server
@@ -151,13 +153,11 @@ HDRP/orchestrator/cmd/server/server
 HDRP/orchestrator/cmd/planner/planner
 
 # Root-level cache and temp files
-/.pytest_cache/
-/.cursor/
+.pytest_cache/
+.cursor/
+venv/
 
-# Virtual environment (local dev)
-/venv/
-
-# Editor-specific (if not already covered)
+# Editor-specific
 *.swp
 *.swo
 *~

@@ -1,12 +1,54 @@
-"""Shared error handling module for HDRP services.
+"""Shared error handling infrastructure for HDRP services.
 
-Provides structured error hierarchy, Sentry integration, and user-friendly
-error messages for graceful degradation.
+Provides custom exceptions, gRPC error mapping, user-facing error messages,
+and Sentry integration with run_id context.
 """
 
+import logging
 import os
 import traceback
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
+import grpc
+
+logger = logging.getLogger(__name__)
+
+# Sentry integration (lazy loaded)
+_sentry_initialized = False
+
+
+def init_sentry(dsn: Optional[str] = None):
+    """Initialize Sentry SDK with configuration.
+    
+    Args:
+        dsn: Sentry DSN. If not provided, reads from SENTRY_DSN env var.
+    """
+    global _sentry_initialized
+    
+    if _sentry_initialized:
+        return
+    
+    try:
+        import sentry_sdk
+        
+        dsn = dsn or os.getenv("SENTRY_DSN")
+        if not dsn:
+            logger.info("Sentry DSN not configured, error tracking disabled")
+            return
+        
+        sentry_sdk.init(
+            dsn=dsn,
+            traces_sample_rate=0.1,
+            profiles_sample_rate=0.1,
+            environment=os.getenv("HDRP_ENV", "development"),
+        )
+        
+        _sentry_initialized = True
+        logger.info("Sentry error tracking initialized")
+        
+    except ImportError:
+        logger.warning("sentry-sdk not installed, error tracking disabled")
+    except Exception as e:
+        logger.error(f"Failed to initialize Sentry: {e}")
 
 
 class HDRPError(Exception):
@@ -23,13 +65,15 @@ class HDRPError(Exception):
         message: str,
         run_id: Optional[str] = None,
         service: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        user_message: Optional[str] = None
     ):
         super().__init__(message)
         self.message = message
         self.run_id = run_id
         self.service = service
         self.metadata = metadata or {}
+        self.user_message = user_message
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert error to dictionary for logging/serialization."""
@@ -49,54 +93,31 @@ class ServiceError(HDRPError):
 
 class ResearcherError(ServiceError):
     """Errors from the Researcher service (search, extraction)."""
-    
     def __init__(self, message: str, run_id: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None):
         super().__init__(message, run_id=run_id, service="researcher", metadata=metadata)
 
 
 class CriticError(ServiceError):
     """Errors from the Critic service (verification)."""
-    
     def __init__(self, message: str, run_id: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None):
         super().__init__(message, run_id=run_id, service="critic", metadata=metadata)
 
 
 class SynthesizerError(ServiceError):
     """Errors from the Synthesizer service (report generation)."""
-    
     def __init__(self, message: str, run_id: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None):
         super().__init__(message, run_id=run_id, service="synthesizer", metadata=metadata)
 
 
 class PrincipalError(ServiceError):
     """Errors from the Principal service (query decomposition)."""
-    
     def __init__(self, message: str, run_id: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None):
         super().__init__(message, run_id=run_id, service="principal", metadata=metadata)
 
 
-def _get_sentry_client():
-    """Lazy-load Sentry SDK if DSN is configured.
-    
-    Returns:
-        sentry_sdk module if available and configured, None otherwise
-    """
-    sentry_dsn = os.environ.get("SENTRY_DSN")
-    if not sentry_dsn:
-        return None
-    
-    try:
-        import sentry_sdk
-        # Initialize if not already done
-        if not sentry_sdk.Hub.current.client:
-            sentry_sdk.init(
-                dsn=sentry_dsn,
-                traces_sample_rate=0.1,
-                profiles_sample_rate=0.1,
-            )
-        return sentry_sdk
-    except ImportError:
-        return None
+class SearchProviderError(ResearcherError):
+    """Error from search provider."""
+    pass
 
 
 def report_error(
@@ -105,49 +126,50 @@ def report_error(
     service: Optional[str] = None,
     extra_context: Optional[Dict[str, Any]] = None
 ) -> None:
-    """Report error to Sentry with structured context.
+    """Report error to Sentry with structured context."""
+    init_sentry()
     
-    Args:
-        error: The exception to report
-        run_id: Execution context identifier
-        service: Service name where error occurred
-        extra_context: Additional metadata for debugging
-    """
-    sentry = _get_sentry_client()
-    if not sentry:
-        return
-    
-    context = extra_context or {}
-    
-    # Add run_id and service as tags for filtering
-    with sentry.push_scope() as scope:
-        if run_id:
-            scope.set_tag("run_id", run_id)
-        if service:
-            scope.set_tag("service", service)
+    try:
+        import sentry_sdk
         
-        # Add all extra context
-        for key, value in context.items():
-            scope.set_context(key, value)
-        
-        # If it's an HDRPError, add its metadata
-        if isinstance(error, HDRPError):
-            scope.set_context("hdrp_error", error.to_dict())
-        
-        sentry.capture_exception(error)
+        with sentry_sdk.push_scope() as scope:
+            # Set tags
+            if run_id:
+                scope.set_tag("run_id", run_id)
+            elif isinstance(error, HDRPError) and error.run_id:
+                scope.set_tag("run_id", error.run_id)
+                
+            if service:
+                scope.set_tag("service", service)
+            elif isinstance(error, HDRPError) and error.service:
+                scope.set_tag("service", error.service)
+            
+            # Set context
+            if extra_context:
+                for key, value in extra_context.items():
+                    scope.set_context(key, value)
+            
+            if isinstance(error, HDRPError):
+                scope.set_context("hdrp_error", error.to_dict())
+            
+            sentry_sdk.capture_exception(error)
+            
+    except ImportError:
+        logger.error(f"Error in {service or 'unknown'}: {error}", exc_info=True)
+    except Exception as e:
+        logger.error(f"Failed to report error to Sentry: {e}")
+
+
+# Legacy alias for capture_exception if needed by other components
+capture_exception = report_error
 
 
 def format_user_error(error: Exception, include_details: bool = False) -> str:
-    """Convert exception to user-friendly message (no stack traces).
-    
-    Args:
-        error: The exception to format
-        include_details: Whether to include technical details (for verbose mode)
-    
-    Returns:
-        Clean error message suitable for end users
-    """
+    """Convert exception to user-facing error message (no stack traces)."""
     if isinstance(error, HDRPError):
+        if error.user_message:
+            return error.user_message
+            
         service_name = error.service or "service"
         base_message = f"{service_name.title()} service encountered an error"
         
@@ -156,12 +178,66 @@ def format_user_error(error: Exception, include_details: bool = False) -> str:
         else:
             return f"{base_message}. Continuing with partial results..."
     
-    # Generic exception
-    error_type = type(error).__name__
+    # Map common exceptions to friendly messages
+    if isinstance(error, ResearcherError):
+        return "Unable to complete research. The search service may be unavailable."
+    if isinstance(error, CriticError):
+        return "Unable to verify claims. Continuing with unverified results."
+    if isinstance(error, SynthesizerError):
+        return "Unable to generate complete report. Partial results available."
+    if isinstance(error, PrincipalError):
+        return "Unable to decompose query. Using simplified research plan."
+    
+    if isinstance(error, ValueError):
+        return f"Invalid input: {str(error)}"
+    if isinstance(error, TimeoutError):
+        return "Request took too long to process. Please try a simpler query."
+    if isinstance(error, ConnectionError):
+        return "Service connection failed. Please check your network connection."
+    
+    # Generic fallback
     if include_details:
-        return f"Error ({error_type}): {str(error)}"
+        return f"Error ({type(error).__name__}): {str(error)}"
     else:
-        return "An unexpected error occurred. Continuing with partial results..."
+        return "An unexpected error occurred. Our team has been notified."
+
+
+# Legacy alias
+get_user_friendly_message = format_user_error
+
+
+def map_to_grpc_status(exc: Exception) -> grpc.StatusCode:
+    """Map exception to appropriate gRPC status code."""
+    if isinstance(exc, ValueError):
+        return grpc.StatusCode.INVALID_ARGUMENT
+    if isinstance(exc, TimeoutError):
+        return grpc.StatusCode.DEADLINE_EXCEEDED
+    if isinstance(exc, (ConnectionError, SearchProviderError)):
+        return grpc.StatusCode.UNAVAILABLE
+    if isinstance(exc, PermissionError):
+        return grpc.StatusCode.PERMISSION_DENIED
+    if isinstance(exc, NotImplementedError):
+        return grpc.StatusCode.UNIMPLEMENTED
+    
+    return grpc.StatusCode.INTERNAL
+
+
+def handle_rpc_error(
+    exc: Exception,
+    context: grpc.ServicerContext,
+    run_id: Optional[str] = None,
+    service: Optional[str] = None,
+    additional_context: Optional[Dict[str, Any]] = None
+):
+    """Handle RPC error by setting gRPC status and capturing in Sentry."""
+    logger.error(f"RPC error in {service}: {exc}", exc_info=True)
+    report_error(exc, run_id=run_id, service=service, extra_context=additional_context)
+    
+    status_code = map_to_grpc_status(exc)
+    user_message = format_user_error(exc)
+    
+    context.set_code(status_code)
+    context.set_details(user_message)
 
 
 def wrap_service_error(
@@ -171,25 +247,11 @@ def wrap_service_error(
     default_return=None,
     metadata: Optional[Dict[str, Any]] = None
 ):
-    """Decorator to wrap service methods with error handling.
-    
-    Args:
-        func: Function to wrap
-        error_class: HDRPError subclass to raise on error
-        run_id: Execution context identifier
-        default_return: Value to return on error (enables graceful degradation)
-        metadata: Additional context for error reporting
-    
-    Usage:
-        @wrap_service_error(ResearcherError, run_id=self.run_id, default_return=[])
-        def research(self, query):
-            # ... implementation
-    """
+    """Decorator to wrap service methods with error handling."""
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            # Don't double-wrap HDRP errors
             if isinstance(e, HDRPError):
                 wrapped_error = e
             else:
@@ -199,7 +261,6 @@ def wrap_service_error(
                     metadata={**(metadata or {}), "original_error": type(e).__name__}
                 )
             
-            # Report to Sentry
             report_error(
                 wrapped_error,
                 run_id=run_id,
@@ -207,10 +268,16 @@ def wrap_service_error(
                 extra_context=metadata
             )
             
-            # Return default or re-raise
             if default_return is not None:
                 return default_return
             else:
                 raise wrapped_error
-    
     return wrapper
+
+
+def can_continue_with_partial_results(service: str, error: Exception) -> bool:
+    """Determine if execution can continue with partial results."""
+    # Logic from remote branch
+    if service in ["researcher", "critic", "synthesizer", "principal"]:
+        return True
+    return False

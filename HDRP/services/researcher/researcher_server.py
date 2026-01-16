@@ -11,8 +11,13 @@ from typing import Optional
 import sys
 import os
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
+# Add project root and gRPC gen path to sys.path
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+grpc_gen_path = os.path.join(root_path, "HDRP/api/gen/python/HDRP/api")
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
+if grpc_gen_path not in sys.path:
+    sys.path.insert(0, grpc_gen_path)
 
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2_grpc
@@ -41,6 +46,10 @@ class ResearcherServicer(hdrp_services_pb2_grpc.ResearcherServiceServicer):
         Returns:
             ResearchResponse with extracted claims.
         """
+        from HDRP.services.shared.errors import (
+            handle_rpc_error, ResearcherError, SearchProviderError
+        )
+        
         try:
             # Validate request
             query = request.query.strip()
@@ -70,7 +79,7 @@ class ResearcherServicer(hdrp_services_pb2_grpc.ResearcherServiceServicer):
                 run_id=run_id
             )
             
-            # Execute research
+            # Execute research with error handling
             claims = researcher.research(query, source_node_id=source_node_id)
             
             # Convert AtomicClaim objects to protobuf messages
@@ -96,21 +105,37 @@ class ResearcherServicer(hdrp_services_pb2_grpc.ResearcherServiceServicer):
         
         except ValueError as e:
             logger.error(f"Validation error: {e}")
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(f'Invalid input: {str(e)}')
+            handle_rpc_error(
+                e, context, run_id=request.run_id, service="researcher",
+                additional_context={"query": request.query}
+            )
             return hdrp_services_pb2.ResearchResponse(claims=[], total_sources=0)
         
         except TimeoutError as e:
             logger.error(f"Timeout error: {e}")
-            context.set_code(grpc.StatusCode.DEADLINE_EXCEEDED)
-            context.set_details(f'Request processing exceeded deadline: {str(e)}')
+            handle_rpc_error(
+                e, context, run_id=request.run_id, service="researcher",
+                additional_context={"query": request.query}
+            )
             return hdrp_services_pb2.ResearchResponse(claims=[], total_sources=0)
-            
+        
         except Exception as e:
+            # Graceful degradation: return empty claims instead of crashing
             logger.error(f"Research failed: {e}", exc_info=True)
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Internal error: {str(e)}")
+            
+            # Wrap in ResearcherError for better user messages
+            wrapped = ResearcherError(
+                str(e),
+                user_message="Unable to complete research. The search service may be unavailable."
+            )
+            handle_rpc_error(
+                wrapped, context, run_id=request.run_id, service="researcher",
+                additional_context={"query": request.query, "source_node_id": request.source_node_id}
+            )
+            
+            # Return empty claims instead of failing
             return hdrp_services_pb2.ResearchResponse(claims=[], total_sources=0)
+
 
 
 def serve(port: int = 50052):

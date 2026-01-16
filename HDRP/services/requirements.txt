@@ -1,6 +1,7 @@
 grpcio>=1.50.0
 grpcio-tools>=1.50.0
+protobuf>=4.21.0
 openai>=1.0.0
+sentry-sdk>=1.40.0
 pydantic>=2.0.0
 protobuf>=4.0.0
-

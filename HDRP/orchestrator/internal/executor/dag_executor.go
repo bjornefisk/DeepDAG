@@ -55,7 +55,7 @@ type NodeResult struct {
 // If maxWorkers <= 0, uses default from configuration.
 func NewDAGExecutor(clients *clients.ServiceClients, maxWorkers int) *DAGExecutor {
 	config := concurrency.LoadConfig()
-	
+
 	if maxWorkers <= 0 {
 		maxWorkers = config.MaxWorkers
 	}
@@ -68,7 +68,8 @@ func NewDAGExecutor(clients *clients.ServiceClients, maxWorkers int) *DAGExecuto
 	}
 
 	// Initialize checkpoint store
-	checkpointStore, err := retry.NewFileCheckpointStore("./checkpoints")
+	var checkpointStore retry.CheckpointStore
+	checkpointStore, err = retry.NewFileCheckpointStore("./checkpoints")
 	if err != nil {
 		log.Printf("[DAGExecutor] Warning: failed to initialize checkpoint store: %v", err)
 		checkpointStore = retry.NewInMemoryCheckpointStore()
@@ -108,7 +109,7 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID strin
 	// Attach storage to graph if available
 	if e.storage != nil {
 		graph.SetStorage(e.storage)
-		
+
 		// Persist initial graph state
 		if err := e.persistInitialGraph(graph); err != nil {
 			log.Printf("[Executor] Warning: failed to persist initial graph: %v", err)
@@ -136,7 +137,7 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID strin
 
 	// Track number of nodes currently executing
 	pendingCount := 0
-	
+
 	// Execution loop
 	for {
 		select {
@@ -165,7 +166,7 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID strin
 			select {
 			case result := <-resultChan:
 				pendingCount--
-				
+
 				// Store result
 				resultsMu.Lock()
 				nodeResults[result.NodeID] = result
@@ -482,7 +483,7 @@ func (e *DAGExecutor) RecoverGraph(graphID string) (*dag.Graph, error) {
 		return nil, fmt.Errorf("failed to load graph from storage: %w", err)
 	}
 
-	log.Printf("[Executor] Successfully recovered graph %s with %d nodes (status: %s)", 
+	log.Printf("[Executor] Successfully recovered graph %s with %d nodes (status: %s)",
 		graphID, len(graph.Nodes), graph.Status)
 
 	return graph, nil
@@ -553,7 +554,7 @@ func (e *DAGExecutor) persistInitialGraph(graph *dag.Graph) error {
 		}
 	}
 
-	log.Printf("[Executor] Persisted initial graph %s with %d nodes and %d edges", 
+	log.Printf("[Executor] Persisted initial graph %s with %d nodes and %d edges",
 		graph.ID, len(graph.Nodes), len(graph.Edges))
 
 	return nil

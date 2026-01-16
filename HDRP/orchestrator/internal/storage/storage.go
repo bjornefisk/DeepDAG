@@ -19,31 +19,37 @@ type Storage interface {
 	LoadGraph(graphID string) (*GraphState, error)
 	UpdateGraphStatus(graphID string, status string) error
 	DeleteGraph(graphID string) error
-	
+
 	// Node operations
 	SaveNode(graphID string, node *NodeState) error
 	LoadNodes(graphID string) ([]*NodeState, error)
 	UpdateNodeStatus(graphID string, nodeID string, status string, retryCount int, lastError string) error
-	
+
 	// Edge operations
 	SaveEdge(graphID string, from, to string) error
 	LoadEdges(graphID string) ([]*EdgeState, error)
-	
+
 	// WAL operations
 	AppendWAL(entry *WALEntry) error
 	GetUnreplayedWAL(graphID string) ([]*WALEntry, error)
 	MarkWALReplayed(graphID string, upToSeqNum int64) error
-	
+	LogMutation(graphID string, mutationType MutationType, payload interface{}) error
+
 	// Snapshot operations
 	SaveSnapshot(graphID string, seqNum int64, data []byte) error
 	LoadSnapshot(graphID string) (*Snapshot, error)
-	
+	ShouldCreateSnapshot(graphID string) (bool, error)
+	CreateSnapshot(graphID string) error
+
+	// Recovery
+	RecoverGraph(graphID string) (*RecoveredGraphState, error)
+
 	// Cleanup
 	CleanupOldWAL(graphID string, beforeSeqNum int64) error
-	
+
 	// Transaction support
 	BeginTx() (Transaction, error)
-	
+
 	// Lifecycle
 	Close() error
 }
@@ -169,7 +175,7 @@ func (s *SQLiteStorage) loadSequenceNumbers() error {
 func (s *SQLiteStorage) getNextSeqNum(graphID string) int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	seq := s.seqNumbers[graphID]
 	s.seqNumbers[graphID] = seq + 1
 	return seq

@@ -10,8 +10,13 @@ import logging
 import sys
 import os
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
+# Add project root and gRPC gen path to sys.path
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+grpc_gen_path = os.path.join(root_path, "HDRP/api/gen/python/HDRP/api")
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
+if grpc_gen_path not in sys.path:
+    sys.path.insert(0, grpc_gen_path)
 
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2_grpc
@@ -38,6 +43,10 @@ class SynthesizerServicer(hdrp_services_pb2_grpc.SynthesizerServiceServicer):
         Returns:
             SynthesizeResponse with markdown report.
         """
+        from HDRP.services.shared.errors import (
+            handle_rpc_error, SynthesizerError
+        )
+        
         try:
             # Validate request
             if not request.verification_results:
@@ -84,7 +93,7 @@ class SynthesizerServicer(hdrp_services_pb2_grpc.SynthesizerServiceServicer):
                 )
                 critique_results.append(result)
             
-            # Synthesize report with new parameters
+            # Synthesize report with error handling (supports partial results)
             report = self.synthesizer.synthesize(
                 verification_results=critique_results,
                 context=ctx,
@@ -102,8 +111,10 @@ class SynthesizerServicer(hdrp_services_pb2_grpc.SynthesizerServiceServicer):
         
         except ValueError as e:
             logger.error(f"Validation error: {e}")
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(f'Invalid input: {str(e)}')
+            handle_rpc_error(
+                e, context, run_id=request.run_id, service="synthesizer",
+                additional_context={"result_count": len(request.verification_results)}
+            )
             return hdrp_services_pb2.SynthesizeResponse(
                 report="# Error\n\nInvalid input provided.",
                 artifact_uri=""
@@ -111,21 +122,35 @@ class SynthesizerServicer(hdrp_services_pb2_grpc.SynthesizerServiceServicer):
         
         except TimeoutError as e:
             logger.error(f"Timeout error: {e}")
-            context.set_code(grpc.StatusCode.DEADLINE_EXCEEDED)
-            context.set_details(f'Request processing exceeded deadline: {str(e)}')
+            handle_rpc_error(
+                e, context, run_id=request.run_id, service="synthesizer",
+                additional_context={"result_count": len(request.verification_results)}
+            )
             return hdrp_services_pb2.SynthesizeResponse(
                 report="# Error\n\nReport generation timed out.",
                 artifact_uri=""
             )
             
         except Exception as e:
+            # Graceful degradation: generate partial report if possible
             logger.error(f"Synthesis failed: {e}", exc_info=True)
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Internal error: {str(e)}")
+            
+            wrapped = SynthesizerError(
+                str(e),
+                user_message="Unable to generate complete report. Partial results may be available."
+            )
+            handle_rpc_error(
+                wrapped, context, run_id=request.run_id, service="synthesizer",
+                additional_context={"result_count": len(request.verification_results)}
+            )
+            
+            # Return partial error report instead of completely failing
             return hdrp_services_pb2.SynthesizeResponse(
-                report="# Error\n\nFailed to generate report due to internal error.",
+                report="# Research Report (Partial)\n\n**Note:** Report generation encountered errors. Some content may be missing.\n\n" + 
+                      f"Run ID: {run_id}\n\n**Error:** {str(e)}",
                 artifact_uri=""
             )
+
 
 
 def serve(port: int = 50054):

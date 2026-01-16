@@ -5,7 +5,7 @@ import warnings
 
 from HDRP.api.proto import hdrp_services_pb2 as HDRP_dot_api_dot_proto_dot_hdrp__services__pb2
 
-GRPC_GENERATED_VERSION = '1.76.0'
+GRPC_GENERATED_VERSION = "1.74.0"
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -20,7 +20,7 @@ if _version_not_supported:
         f'The grpc package installed is at version {GRPC_VERSION},'
         + ' but the generated code in HDRP/api/proto/hdrp_services_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
-        + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
+        + f' Please upgrade your grpc module to grpcio>=1.74.0'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
     )
 

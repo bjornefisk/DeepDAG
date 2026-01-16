@@ -178,7 +178,8 @@ def run_orchestrated(
         console.print(f"[yellow]{user_message}[/yellow]")
         
         # Report to Sentry
-        report_error(e, run_id=result.get("run_id") if 'result' in locals() else None)
+        current_run_id = result.get("run_id") if 'result' in locals() else os.getenv("HDRP_RUN_ID")
+        report_error(e, run_id=current_run_id)
         
         if verbose:
             console.print(f"[dim]Error details: {e.to_dict()}[/dim]")
@@ -190,9 +191,10 @@ def run_orchestrated(
         console.print(f"[red]{user_message}[/red]")
         
         # Report to Sentry
+        current_run_id = result.get("run_id") if 'result' in locals() else os.getenv("HDRP_RUN_ID")
         report_error(
             e,
-            run_id=result.get("run_id") if 'result' in locals() else None,
+            run_id=current_run_id,
             extra_context={"component": "orchestrated_runner"}
         )
         

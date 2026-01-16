@@ -11,8 +11,13 @@ from typing import Optional
 import sys
 import os
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
+# Add project root and gRPC gen path to sys.path
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+grpc_gen_path = os.path.join(root_path, "HDRP/api/gen/python/HDRP/api")
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
+if grpc_gen_path not in sys.path:
+    sys.path.insert(0, grpc_gen_path)
 
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2_grpc
@@ -36,6 +41,10 @@ class PrincipalServicer(hdrp_services_pb2_grpc.PrincipalServiceServicer):
         Uses LLM to identify dependencies and parallel work streams.
         Falls back to linear DAG if LLM is unavailable.
         """
+        from HDRP.services.shared.errors import (
+            handle_rpc_error, PrincipalError
+        )
+        
         try:
             # Validate query (protobuf validation should catch empty strings, but we add business logic)
             query = request.query.strip()
@@ -56,7 +65,7 @@ class PrincipalServicer(hdrp_services_pb2_grpc.PrincipalServiceServicer):
                 "run_id": run_id
             })
             
-            # Use LLM-based decomposition service
+            # Use LLM-based decomposition service (has built-in fallback to linear DAG)
             response = self.service.decompose_query(query, run_id)
             
             return response
@@ -66,17 +75,30 @@ class PrincipalServicer(hdrp_services_pb2_grpc.PrincipalServiceServicer):
                 "error": str(e),
                 "error_type": "ValueError"
             })
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(f'Invalid input: {str(e)}')
+            handle_rpc_error(
+                e, context, run_id=request.run_id, service="principal",
+                additional_context={"query": request.query}
+            )
             return hdrp_services_pb2.DecompositionResponse()
         
         except Exception as e:
+            # Graceful degradation: service already has fallback to linear DAG
+            # but if it completely fails, return empty response
             self.logger.log("decompose_error", {
                 "error": str(e),
                 "error_type": type(e).__name__
             })
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f'Internal error: {str(e)}')
+            
+            wrapped = PrincipalError(
+                str(e),
+                user_message="Unable to decompose query. Using simplified research plan."
+            )
+            handle_rpc_error(
+                wrapped, context, run_id=request.run_id, service="principal",
+                additional_context={"query": request.query}
+            )
+            
+            # Return empty response (orchestrator should handle this)
             return hdrp_services_pb2.DecompositionResponse()
 
 
