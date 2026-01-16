@@ -1,0 +1,260 @@
+{
+  "dashboard": {
+    "title": "HDRP Observability Dashboard",
+    "tags": ["hdrp", "dag", "research"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "DAG Execution Latency (Percentiles)",
+        "type": "graph",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(hdrp_dag_execution_seconds_bucket[5m])) by (le, status))",
+            "legendFormat": "p50 - {{status}}",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(hdrp_dag_execution_seconds_bucket[5m])) by (le, status))",
+            "legendFormat": "p95 - {{status}}",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(hdrp_dag_execution_seconds_bucket[5m])) by (le, status))",
+            "legendFormat": "p99 - {{status}}",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          { "format": "s", "label": "Duration" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Active DAG Executions",
+        "type": "graph",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+        "targets": [
+          {
+            "expr": "hdrp_active_dag_executions",
+            "legendFormat": "Active Executions",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Claims Extracted (Rate)",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(rate(hdrp_claims_extracted_total[5m]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "cps",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 50, "color": "yellow" },
+                { "value": 100, "color": "red" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Claims Verified (Rate)",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(rate(hdrp_claims_verified_total[5m]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "cps",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Claims Rejected (Rate)",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(rate(hdrp_claims_rejected_total[5m]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "cps",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 20, "color": "yellow" },
+                { "value": 50, "color": "red" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Node Execution Throughput",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(rate(hdrp_node_executions_total[5m]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "blue" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "RPC Latency by Service",
+        "type": "graph",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(hdrp_rpc_latency_seconds_bucket[5m])) by (le, service))",
+            "legendFormat": "{{service}} (p95)",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(hdrp_python_rpc_latency_seconds_bucket[5m])) by (le, service))",
+            "legendFormat": "{{service}}-python (p95)",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          { "format": "s", "label": "Latency" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Error Rate by Service",
+        "type": "graph",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+        "targets": [
+          {
+            "expr": "sum(rate(hdrp_errors_total[5m])) by (service)",
+            "legendFormat": "{{service}}",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(hdrp_python_rpc_total{status=\"error\"}[5m])) by (service)",
+            "legendFormat": "{{service}}-python",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          { "format": "ops", "label": "Errors/sec" },
+          { "format": "short" }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Claims Verification Rate",
+        "type": "graph",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+        "targets": [
+          {
+            "expr": "sum(rate(hdrp_claims_verified_total[5m])) by (run_id)",
+            "legendFormat": "Verified - {{run_id}}",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(hdrp_claims_rejected_total[5m])) by (run_id)",
+            "legendFormat": "Rejected - {{run_id}}",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "DAG Success vs Failure Rate",
+        "type": "piechart",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+        "targets": [
+          {
+            "expr": "sum(rate(hdrp_dag_execution_seconds_count{status=\"success\"}[5m]))",
+            "legendFormat": "Success",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(hdrp_dag_execution_seconds_count{status=\"failed\"}[5m]))",
+            "legendFormat": "Failed",
+            "refId": "B"
+          },
+          {
+            "expr": "sum(rate(hdrp_dag_execution_seconds_count{status=\"partial_success\"}[5m]))",
+            "legendFormat": "Partial Success",
+            "refId": "C"
+          }
+        ],
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    }
+  }
+}
