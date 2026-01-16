@@ -15,6 +15,7 @@ from typing import List, Dict, Any, Optional
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
 from HDRP.services.principal.prompts import build_decomposition_prompt
 from HDRP.services.shared.logger import ResearchLogger
+from HDRP.services.shared.errors import PrincipalError, report_error
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,18 @@ class PrincipalService:
             )
             
         except Exception as e:
+            # Wrap error and report to Sentry before fallback
+            error = PrincipalError(
+                message=f"Query decomposition failed: {str(e)}",
+                run_id=run_id,
+                metadata={
+                    "query": query,
+                    "model": model,
+                    "original_error": type(e).__name__
+                }
+            )
+            report_error(error, run_id=run_id, service="principal")
+            
             self.logger.log("decompose_fallback", {
                 "query": query,
                 "error": str(e),

@@ -1,5 +1,6 @@
 from typing import List, Dict, Optional
 from HDRP.services.shared.claims import AtomicClaim, CritiqueResult
+from HDRP.services.shared.errors import SynthesizerError, report_error
 from datetime import datetime, timezone
 import json
 import os
@@ -40,16 +41,47 @@ class SynthesizerService:
         
         query = context.get("query", "")
         
-        # Use new formatter to generate the report
-        report = self.formatter.format_full_report(
-            verification_results=verification_results,
-            graph_data=graph_data,
-            context=context,
-            run_id=run_id,
-            query=query
-        )
+        try:
+            # Use new formatter to generate the report
+            report = self.formatter.format_full_report(
+                verification_results=verification_results,
+                graph_data=graph_data,
+                context=context,
+                run_id=run_id,
+                query=query
+            )
+            
+            return report
         
-        return report
+        except Exception as e:
+            # Report generation failed - create minimal fallback report
+            error = SynthesizerError(
+                message=f"Report generation failed: {str(e)}",
+                run_id=run_id,
+                metadata={
+                    "query": query,
+                    "verification_count": len(verification_results),
+                    "original_error": type(e).__name__
+                }
+            )
+            report_error(error, run_id=run_id, service="synthesizer")
+            
+            # Generate minimal fallback report with verified claims
+            verified_claims = [r.claim for r in verification_results if r.is_valid]
+            
+            fallback_report = f"# Research Report\n\n"
+            fallback_report += f"**Query:** {query}\n\n"
+            fallback_report += f"**Note:** Report formatter encountered an error. Showing raw verified claims.\n\n"
+            fallback_report += f"## Verified Claims ({len(verified_claims)} total)\n\n"
+            
+            for idx, claim in enumerate(verified_claims, 1):
+                fallback_report += f"{idx}. {claim.statement}\n"
+                fallback_report += f"   - Source: [{claim.source_url}]({claim.source_url})\n"
+                if claim.support_text:
+                    fallback_report += f"   - Evidence: \"{claim.support_text[:100]}...\"\n"
+                fallback_report += "\n"
+            
+            return fallback_report
     
     def create_artifact_bundle(
         self,

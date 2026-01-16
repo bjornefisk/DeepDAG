@@ -3,6 +3,7 @@ import time
 from HDRP.tools.search.base import SearchProvider, SearchError
 from HDRP.services.shared.claims import ClaimExtractor, AtomicClaim
 from HDRP.services.shared.logger import ResearchLogger
+from HDRP.services.shared.errors import ResearcherError, report_error
 
 class ResearcherService:
     """Service responsible for executing research tasks.
@@ -43,19 +44,46 @@ class ResearcherService:
                     time.sleep(1)
                     continue
                 else:
+                    # Final retry failed - wrap error and report to Sentry
+                    error = ResearcherError(
+                        message=f"Search failed after {max_retries + 1} attempts: {str(e)}",
+                        run_id=self.logger.run_id,
+                        metadata={
+                            "query": query,
+                            "source_node_id": source_node_id,
+                            "attempts": max_retries + 1,
+                            "original_error": type(e).__name__
+                        }
+                    )
+                    report_error(error, run_id=self.logger.run_id, service="researcher")
+                    
                     self.logger.log("research_failed", {
                         "query": query,
                         "error": str(e),
                         "type": type(e).__name__
                     })
-                    raise e
+                    # Return empty claims instead of raising - enables partial results
+                    return []
             except Exception as e:
+                # Unexpected error - wrap and report
+                error = ResearcherError(
+                    message=f"Unexpected search error: {str(e)}",
+                    run_id=self.logger.run_id,
+                    metadata={
+                        "query": query,
+                        "source_node_id": source_node_id,
+                        "original_error": type(e).__name__
+                    }
+                )
+                report_error(error, run_id=self.logger.run_id, service="researcher")
+                
                 self.logger.log("research_failed", {
                     "query": query,
                     "error": str(e),
                     "type": type(e).__name__
                 })
-                raise e
+                # Return empty claims instead of raising
+                return []
 
         if not search_response.results:
             self.logger.log("research_failed", {
@@ -68,25 +96,37 @@ class ResearcherService:
         all_claims = []
         
         for idx, result in enumerate(search_response.results, 1):
-            # For the MVP standard, we extract claims directly from the search snippets.
-            # This ensures that 'support_text' is always tied to a verified search result.
-            # We now pass full traceability metadata: title and search rank position.
-            extraction = self.extractor.extract(
-                result.snippet, 
-                source_url=result.url, 
-                source_node_id=source_node_id,
-                source_title=result.title,
-                source_rank=idx
-            )
-            all_claims.extend(extraction.claims)
-            
-            # Log traceability metadata for debugging
-            if extraction.claims:
-                self.logger.log("claims_extracted", {
-                    "source_title": result.title,
+            try:
+                # For the MVP standard, we extract claims directly from the search snippets.
+                # This ensures that 'support_text' is always tied to a verified search result.
+                # We now pass full traceability metadata: title and search rank position.
+                extraction = self.extractor.extract(
+                    result.snippet, 
+                    source_url=result.url, 
+                    source_node_id=source_node_id,
+                    source_title=result.title,
+                    source_rank=idx
+                )
+                all_claims.extend(extraction.claims)
+                
+                # Log traceability metadata for debugging
+                if extraction.claims:
+                    self.logger.log("claims_extracted", {
+                        "source_title": result.title,
+                        "source_url": result.url,
+                        "source_rank": idx,
+                        "claims_count": len(extraction.claims)
+                    })
+            except Exception as e:
+                # Log extraction failure but continue processing other results
+                self.logger.log("extraction_failed", {
                     "source_url": result.url,
+                    "source_title": result.title,
                     "source_rank": idx,
-                    "claims_count": len(extraction.claims)
+                    "error": str(e),
+                    "type": type(e).__name__
                 })
+                # Continue with other results - enables partial claims
+                continue
             
         return all_claims

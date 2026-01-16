@@ -12,6 +12,7 @@ import requests
 import json
 from typing import Optional
 from rich.console import Console
+from HDRP.services.shared.errors import HDRPError, format_user_error, report_error
 
 console = Console()
 
@@ -171,11 +172,34 @@ def run_orchestrated(
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
         return 1
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        import traceback
+    except HDRPError as e:
+        # Structured HDRP error - use user-friendly message
+        user_message = format_user_error(e, include_details=verbose)
+        console.print(f"[yellow]{user_message}[/yellow]")
+        
+        # Report to Sentry
+        report_error(e, run_id=result.get("run_id") if 'result' in locals() else None)
+        
         if verbose:
+            console.print(f"[dim]Error details: {e.to_dict()}[/dim]")
+        
+        return 1
+    except Exception as e:
+        # Unexpected error - show user-friendly message
+        user_message = format_user_error(e, include_details=verbose)
+        console.print(f"[red]{user_message}[/red]")
+        
+        # Report to Sentry
+        report_error(
+            e,
+            run_id=result.get("run_id") if 'result' in locals() else None,
+            extra_context={"component": "orchestrated_runner"}
+        )
+        
+        if verbose:
+            import traceback
             traceback.print_exc()
+        
         return 1
     finally:
         # Cleanup: stop all services
@@ -344,12 +368,36 @@ def run_orchestrated_programmatic(
             "error": "",
         }
     
-    except Exception as e:
+    except HDRPError as e:
+        # Structured HDRP error - use user-friendly message
+        user_message = format_user_error(e, include_details=verbose)
+        
+        # Report to Sentry
+        report_error(e, run_id=run_id, extra_context={"caller": "programmatic"})
+        
         return {
             "success": False,
             "run_id": run_id or "",
             "report": "",
-            "error": str(e),
+            "error": user_message,
+        }
+    
+    except Exception as e:
+        # Unexpected error - use user-friendly message
+        user_message = format_user_error(e, include_details=verbose)
+        
+        # Report to Sentry
+        report_error(
+            e,
+            run_id=run_id,
+            extra_context={"caller": "programmatic", "original_error": type(e).__name__}
+        )
+        
+        return {
+            "success": False,
+            "run_id": run_id or "",
+            "report": "",
+            "error": user_message,
         }
     
     finally:
