@@ -4,6 +4,7 @@ from HDRP.services.shared.claims import AtomicClaim, CritiqueResult
 from HDRP.services.shared.logger import ResearchLogger
 from HDRP.services.shared.errors import CriticError, report_error
 from HDRP.services.shared.profiling_utils import profile_block, enable_profiling_env
+from HDRP.services.critic.nli_verifier import NLIVerifier
 from datetime import datetime
 
 class CriticService:
@@ -15,11 +16,18 @@ class CriticService:
     
     Optimized with batch verification and tokenization caching.
     """
-    def __init__(self, run_id: Optional[str] = None):
+    def __init__(self, run_id: Optional[str] = None, use_nli: bool = True, nli_threshold: float = 0.65):
         self.logger = ResearchLogger("critic", run_id=run_id)
         self.enable_profiling = enable_profiling_env()
         self._tokenization_cache: Dict[str, List[str]] = {}
         self._executor = ThreadPoolExecutor(max_workers=4)
+        
+        # NLI-based verification
+        self.use_nli = use_nli
+        self.nli_threshold = nli_threshold
+        self._nli_verifier: Optional[NLIVerifier] = None
+        if self.use_nli:
+            self._nli_verifier = NLIVerifier()
     
     def verify(self, claims: List[AtomicClaim], task: str) -> List[CritiqueResult]:
         """Verify claims with balanced precision/recall using query decomposition logic.
@@ -117,25 +125,36 @@ class CriticService:
                             if not support_has:
                                 rejection_reason = "REJECTED: Causal claim lacks supporting evidence"
 
-                    # Grounding check: adaptive overlap based on claim type
+                    # Grounding check: NLI-based or heuristic overlap
                     filtered_tokens = []
+                    nli_score = None
                     if not rejection_reason:
-                        statement_tokens = self._tokenize(lower_statement)
-                        support_tokens = set(self._tokenize(lower_support))
-                        
-                        filtered_tokens = [w for w in statement_tokens if w not in STOP_WORDS]
-                        if not filtered_tokens:
-                            filtered_tokens = statement_tokens
+                        if self.use_nli and self._nli_verifier:
+                            # NLI-based verification
+                            nli_score = self._nli_verifier.compute_entailment(
+                                premise=claim.support_text,
+                                hypothesis=claim.statement
+                            )
+                            
+                            if nli_score < self.nli_threshold:
+                                rejection_reason = f"REJECTED: Low grounding (NLI score: {nli_score:.2f})"
+                        else:
+                            # Fallback to heuristic word overlap
+                            statement_tokens = self._tokenize(lower_statement)
+                            support_tokens = set(self._tokenize(lower_support))
+                            
+                            filtered_tokens = [w for w in statement_tokens if w not in STOP_WORDS]
+                            if not filtered_tokens:
+                                filtered_tokens = statement_tokens
 
-                        overlap = sum(1 for w in filtered_tokens if w in support_tokens)
-                        
-                        # Adaptive threshold: speculative claims need less strict overlap
-                        claim_type = self._detect_claim_type(claim.statement)
-                        threshold = 0.5 if claim_type == "speculative" else 0.6
-                        
-                        
-                        if len(filtered_tokens) > 0 and (overlap / len(filtered_tokens)) < threshold:
-                            rejection_reason = f"REJECTED: Low grounding"
+                            overlap = sum(1 for w in filtered_tokens if w in support_tokens)
+                            
+                            # Adaptive threshold: speculative claims need less strict overlap
+                            claim_type = self._detect_claim_type(claim.statement)
+                            threshold = 0.5 if claim_type == "speculative" else 0.6
+                            
+                            if len(filtered_tokens) > 0 and (overlap / len(filtered_tokens)) < threshold:
+                                rejection_reason = f"REJECTED: Low grounding"
 
                     # Inference indicator check: reject if statement has inference words not in support
                     if not rejection_reason:
@@ -252,13 +271,22 @@ class CriticService:
                             reason = "REJECTED: Not relevant to task"
                 
                 if reason:
-                    self.logger.log("claim_rejected", {
+                    log_data = {
                         "claim_id": claim.claim_id, 
                         "reason": reason,
                         "statement": claim.statement if len(claim.statement) <= 50 else claim.statement[:50] + "...",
                         "source_url": claim.source_url,
                         "source_title": getattr(claim, 'source_title', None)
-                    })
+                    }
+                    # Add NLI score if available
+                    if self.use_nli and "NLI score" in reason:
+                        # Extract NLI score from reason
+                        import re
+                        nli_match = re.search(r'NLI score: (\d+\.\d+)', reason)
+                        if nli_match:
+                            log_data["nli_score"] = float(nli_match.group(1))
+                    
+                    self.logger.log("claim_rejected", log_data)
                     claim.confidence = 0.0
                     results.append(CritiqueResult(
                         claim=claim, 
@@ -269,6 +297,15 @@ class CriticService:
                 else:
                     if claim.confidence < 0.9:
                         claim.confidence = min(claim.confidence + 0.1, 1.0)
+                    
+                    # Log NLI verification if used
+                    if self.use_nli:
+                        self.logger.log("claim_verified", {
+                            "claim_id": claim.claim_id,
+                            "nli_threshold": self.nli_threshold,
+                            "verification_method": "nli"
+                        })
+                    
                     results.append(CritiqueResult(
                         claim=claim, 
                         is_valid=True, 
