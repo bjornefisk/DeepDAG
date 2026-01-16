@@ -17,6 +17,7 @@ import (
 	"hdrp/internal/config"
 	"hdrp/internal/dag"
 	"hdrp/internal/executor"
+	"hdrp/internal/metrics"
 
 	pb "github.com/deepdag/hdrp/api/gen/services"
 
@@ -196,6 +197,8 @@ func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/execute", s.handleExecute)
 	mux.HandleFunc("/health", s.handleHealth)
+	// Expose Prometheus metrics endpoint
+	mux.Handle("/metrics", metrics.GetMetricsHandler())
 
 	addr := fmt.Sprintf(":%d", s.port)
 	server := &http.Server{
@@ -204,6 +207,7 @@ func (s *Server) Start() error {
 	}
 
 	log.Printf("Orchestrator server starting on %s", addr)
+	log.Printf("Metrics available at http://localhost%s/metrics", addr)
 	log.Printf("Profiling endpoints available at http://localhost%s/debug/pprof/", addr)
 
 	// Graceful shutdown
@@ -222,6 +226,11 @@ func (s *Server) Start() error {
 		}
 
 		s.clients.Close()
+		
+		// Shutdown tracing
+		if err := metrics.ShutdownTracing(); err != nil {
+			log.Printf("Tracing shutdown error: %v", err)
+		}
 	}()
 
 	return server.ListenAndServe()
@@ -260,6 +269,8 @@ func convertProtoGraph(pbGraph *pb.Graph) *dag.Graph {
 func main() {
 	port := flag.Int("port", 50055, "Orchestrator server port")
 	configPath := flag.String("config", "", "Path to config file (default: ../config/config.yaml)")
+	otlpEndpoint := flag.String("otlp-endpoint", "localhost:4318", "OpenTelemetry OTLP endpoint")
+	enableTracing := flag.Bool("enable-tracing", false, "Enable OpenTelemetry distributed tracing")
 	flag.Parse()
 
 	// Load configuration
@@ -269,6 +280,15 @@ func main() {
 	}
 
 	log.Printf("Loaded configuration for environment: %s", cfg.Environment)
+
+	// Initialize tracing if enabled
+	if *enableTracing {
+		if err := metrics.InitTracing("hdrp-orchestrator", *otlpEndpoint); err != nil {
+			log.Printf("Warning: Failed to initialize tracing: %v", err)
+		} else {
+			log.Printf("OpenTelemetry tracing initialized with endpoint: %s", *otlpEndpoint)
+		}
+	}
 
 	server, err := NewServer(cfg, *port)
 	if err != nil {

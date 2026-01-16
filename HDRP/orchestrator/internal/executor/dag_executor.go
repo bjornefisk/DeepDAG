@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"hdrp/internal/clients"
 	"hdrp/internal/concurrency"
 	"hdrp/internal/dag"
+	"hdrp/internal/metrics"
 	"hdrp/internal/retry"
 	"hdrp/internal/storage"
 
 	pb "github.com/deepdag/hdrp/api/gen/services"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // DAGExecutor orchestrates concurrent DAG node execution.
@@ -104,6 +107,18 @@ func NewDAGExecutor(clients *clients.ServiceClients, maxWorkers int) *DAGExecuto
 
 // Execute runs the DAG to completion with dependency-aware parallel scheduling.
 func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID string) (*ExecutionResult, error) {
+	startTime := time.Now()
+	metrics.IncrementActiveDagExecutions()
+	defer metrics.DecrementActiveDagExecutions()
+
+	// Start tracing span for entire DAG execution
+	ctx, span := metrics.StartSpan(ctx, "dag.execute",
+		attribute.String("graph.id", graph.ID),
+		attribute.String("run.id", runID),
+		attribute.Int("max.workers", e.maxWorkers),
+	)
+	defer span.End()
+
 	log.Printf("[Executor] Starting execution of graph %s with max %d workers", graph.ID, e.maxWorkers)
 
 	// Attach storage to graph if available
@@ -217,6 +232,7 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID strin
 			}
 
 			if allDone {
+				duration := time.Since(startTime).Seconds()
 				if anyFailed {
 					// Check for partial success
 					if len(succeededNodes) > 0 {
@@ -230,10 +246,18 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID strin
 							result.ErrorMessage = fmt.Sprintf("%d nodes failed, %d succeeded", len(failedNodes), len(succeededNodes))
 							result.RetryMetrics = e.retryMetrics
 							log.Printf("[Executor] Graph completed with partial success: %d succeeded, %d failed", len(succeededNodes), len(failedNodes))
+							metrics.RecordDAGExecution(duration, "partial_success")
+							metrics.AddSpanAttributes(ctx, attribute.Bool("partial_success", true))
 							return result, nil
 						}
 					}
 					// Total failure
+					metrics.RecordDAGExecution(duration, "failed")
+					metrics.RecordError("executor", "dag_execution_failed")
+					metrics.AddSpanAttributes(ctx,
+						attribute.Bool("success", false),
+						attribute.Int("failed_nodes", len(failedNodes)),
+					)
 					return &ExecutionResult{
 						GraphID:        graph.ID,
 						Success:        false,
@@ -253,6 +277,11 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *dag.Graph, runID strin
 				result.SucceededNodes = succeededNodes
 				result.RetryMetrics = e.retryMetrics
 				log.Printf("[Executor] Graph completed successfully: %d nodes", len(succeededNodes))
+				metrics.RecordDAGExecution(duration, "success")
+				metrics.AddSpanAttributes(ctx,
+					attribute.Bool("success", true),
+					attribute.Int("succeeded_nodes", len(succeededNodes)),
+				)
 				return result, nil
 			}
 
@@ -275,20 +304,48 @@ func (e *DAGExecutor) executeNode(
 	nodeResults map[string]*NodeResult,
 	runID string,
 ) *NodeResult {
+	// Create span for node execution
+	ctx, span := metrics.StartSpan(ctx, "node.execute",
+		attribute.String("node.id", node.ID),
+		attribute.String("node.type", node.Type),
+		attribute.String("run.id", runID),
+	)
+	defer span.End()
+
+	startTime := time.Now()
+	var result *NodeResult
+
 	switch node.Type {
 	case "researcher":
-		return e.executeResearcher(ctx, node, runID)
+		result = e.executeResearcher(ctx, node, runID)
 	case "critic":
-		return e.executeCritic(ctx, node, graph, nodeResults, runID)
+		result = e.executeCritic(ctx, node, graph, nodeResults, runID)
 	case "synthesizer":
-		return e.executeSynthesizer(ctx, node, graph, nodeResults, runID)
+		result = e.executeSynthesizer(ctx, node, graph, nodeResults, runID)
 	default:
-		return &NodeResult{
+		result = &NodeResult{
 			NodeID:  node.ID,
 			Success: false,
 			Error:   fmt.Errorf("unknown node type: %s", node.Type),
 		}
+		metrics.RecordError("executor", "unknown_node_type")
 	}
+
+	// Record metrics
+	duration := time.Since(startTime).Seconds()
+	status := "success"
+	if !result.Success {
+		status = "failed"
+		metrics.RecordSpanError(ctx, result.Error)
+		metrics.AddSpanAttributes(ctx, attribute.String("error", result.Error.Error()))
+	}
+	metrics.RecordNodeExecution(node.Type, status)
+	metrics.AddSpanAttributes(ctx,
+		attribute.Bool("success", result.Success),
+		attribute.Float64("duration_seconds", duration),
+	)
+
+	return result
 }
 
 // executeResearcher invokes the Researcher service via gRPC.
@@ -309,8 +366,13 @@ func (e *DAGExecutor) executeResearcher(ctx context.Context, node *dag.Node, run
 		Config:       node.Config,
 	}
 
+	startTime := time.Now()
 	resp, err := e.clients.Researcher.Research(ctx, req)
+	duration := time.Since(startTime).Seconds()
+	metrics.RecordRPCLatency("researcher", "Research", duration, err == nil)
+
 	if err != nil {
+		metrics.RecordError("researcher", "rpc_failed")
 		return &NodeResult{
 			NodeID:  node.ID,
 			Success: false,
@@ -318,7 +380,10 @@ func (e *DAGExecutor) executeResearcher(ctx context.Context, node *dag.Node, run
 		}
 	}
 
-	log.Printf("[Executor] Researcher node %s extracted %d claims", node.ID, len(resp.Claims))
+	claimCount := len(resp.Claims)
+	log.Printf("[Executor] Researcher node %s extracted %d claims", node.ID, claimCount)
+	metrics.RecordClaimExtracted(runID, node.ID, claimCount)
+	metrics.AddSpanAttributes(ctx, attribute.Int("claims.extracted", claimCount))
 
 	return &NodeResult{
 		NodeID:  node.ID,
@@ -368,8 +433,13 @@ func (e *DAGExecutor) executeCritic(
 		RunId:  runID,
 	}
 
+	startTime := time.Now()
 	resp, err := e.clients.Critic.Verify(ctx, req)
+	duration := time.Since(startTime).Seconds()
+	metrics.RecordRPCLatency("critic", "Verify", duration, err == nil)
+
 	if err != nil {
+		metrics.RecordError("critic", "rpc_failed")
 		return &NodeResult{
 			NodeID:  node.ID,
 			Success: false,
@@ -377,7 +447,16 @@ func (e *DAGExecutor) executeCritic(
 		}
 	}
 
-	log.Printf("[Executor] Critic node %s verified %d/%d claims", node.ID, resp.VerifiedCount, len(allClaims))
+	verifiedCount := int(resp.VerifiedCount)
+	rejectedCount := len(allClaims) - verifiedCount
+	log.Printf("[Executor] Critic node %s verified %d/%d claims", node.ID, verifiedCount, len(allClaims))
+	metrics.RecordClaimVerified(runID, node.ID, verifiedCount)
+	metrics.RecordClaimRejected(runID, node.ID, rejectedCount)
+	metrics.AddSpanAttributes(ctx,
+		attribute.Int("claims.total", len(allClaims)),
+		attribute.Int("claims.verified", verifiedCount),
+		attribute.Int("claims.rejected", rejectedCount),
+	)
 
 	return &NodeResult{
 		NodeID:  node.ID,
@@ -424,8 +503,13 @@ func (e *DAGExecutor) executeSynthesizer(
 		RunId:               runID,
 	}
 
+	startTime := time.Now()
 	resp, err := e.clients.Synthesizer.Synthesize(ctx, req)
+	duration := time.Since(startTime).Seconds()
+	metrics.RecordRPCLatency("synthesizer", "Synthesize", duration, err == nil)
+
 	if err != nil {
+		metrics.RecordError("synthesizer", "rpc_failed")
 		return &NodeResult{
 			NodeID:  node.ID,
 			Success: false,
@@ -433,7 +517,12 @@ func (e *DAGExecutor) executeSynthesizer(
 		}
 	}
 
-	log.Printf("[Executor] Synthesizer node %s generated report (%d chars)", node.ID, len(resp.Report))
+	reportSize := len(resp.Report)
+	log.Printf("[Executor] Synthesizer node %s generated report (%d chars)", node.ID, reportSize)
+	metrics.AddSpanAttributes(ctx,
+		attribute.Int("report.size_chars", reportSize),
+		attribute.Int("verification_results.count", len(allResults)),
+	)
 
 	return &NodeResult{
 		NodeID:  node.ID,
