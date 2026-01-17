@@ -24,7 +24,7 @@ from dataclasses import dataclass, asdict
 
 # Add parent directory to path for imports
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from HDRP.services.critic.service import CriticService
 from HDRP.services.shared.claims import AtomicClaim
