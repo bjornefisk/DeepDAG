@@ -58,9 +58,9 @@ class TestNLIVerifier(unittest.TestCase):
         
         score = self.verifier.compute_entailment(premise, hypothesis)
         
-        # Contradictions should have lower similarity (though not necessarily very low)
-        self.assertLess(score, 0.90,
-                       f"Expected lower score for contradiction, got {score:.3f}")
+        # Cross-encoder should properly detect contradiction (low entailment score)
+        self.assertLess(score, 0.4,
+                       f"Expected low score for contradiction, got {score:.3f}")
     
     def test_entailment_negative_unrelated(self):
         """Verify low score for completely unrelated texts."""
@@ -73,8 +73,8 @@ class TestNLIVerifier(unittest.TestCase):
         self.assertLess(score, 0.65,
                        f"Expected low score for unrelated texts, got {score:.3f}")
     
-    def test_embedding_cache_functionality(self):
-        """Verify embedding cache stores and retrieves correctly."""
+    def test_prediction_cache_functionality(self):
+        """Verify prediction cache stores and retrieves correctly."""
         text1 = "Test sentence for caching."
         text2 = "Another test sentence."
         
@@ -84,16 +84,16 @@ class TestNLIVerifier(unittest.TestCase):
         # First call - cache miss
         self.verifier.compute_entailment(text1, text2)
         stats1 = self.verifier.get_cache_stats()
-        self.assertEqual(stats1['cache_misses'], 2)  # Both texts are new
+        self.assertEqual(stats1['cache_misses'], 1)  # Pair is new
         self.assertEqual(stats1['cache_hits'], 0)
         
-        # Second call with same texts - cache hit
+        # Second call with same pair - cache hit
         self.verifier.compute_entailment(text1, text2)
         stats2 = self.verifier.get_cache_stats()
-        self.assertEqual(stats2['cache_hits'], 2)  # Both texts cached
-        self.assertEqual(stats2['cache_misses'], 2)  # Still only 2 misses
+        self.assertEqual(stats2['cache_hits'], 1)  # Pair is cached
+        self.assertEqual(stats2['cache_misses'], 1)  # Still only 1 miss
     
-    def test_embedding_cache_hit_rate(self):
+    def test_prediction_cache_hit_rate(self):
         """Verify cache achieves high hit rate with repeated queries."""
         texts = [
             "First test sentence.",
@@ -111,12 +111,12 @@ class TestNLIVerifier(unittest.TestCase):
         
         stats = self.verifier.get_cache_stats()
         
-        # After first round: 3 unique texts = 3 misses
-        # After second round: all texts cached = hits
-        # Total calls = 2 * (3 pairs) * 2 texts = 12 text embeddings
-        # Expected: 3 misses + 9 hits
-        self.assertGreater(stats['hit_rate'], 0.7,
-                         f"Expected high cache hit rate, got {stats['hit_rate']:.2f}")
+        # After first round: 3 unique pairs = 3 misses
+        # After second round: all pairs cached = 3 hits
+        # Total calls = 2 * 3 pairs = 6 predictions
+        # Expected: 3 misses + 3 hits = 50% hit rate
+        self.assertGreater(stats['hit_rate'], 0.4,
+                          f"Expected high cache hit rate, got {stats['hit_rate']:.2f}")
     
     def test_batch_processing_correctness(self):
         """Verify batch processing produces same results as individual calls."""

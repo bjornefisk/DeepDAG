@@ -1,21 +1,20 @@
 """
 NLI-based Claim Verification Module
 
-Uses sentence-transformers to compute semantic entailment scores between
-support text (premise) and claim statements (hypothesis).
+Uses cross-encoder for Natural Language Inference to compute entailment scores
+between support text (premise) and claim statements (hypothesis).
 
 This module provides:
-- Semantic similarity scoring using transformer models
-- Embedding caching for performance optimization
+- True NLI scoring using cross-encoder models (detects contradiction, negation, entailment)
+- Prediction caching for performance optimization
 - Configurable threshold tuning for precision/recall tradeoff
 - Batch processing support
 """
 
 from typing import List, Tuple, Dict, Optional
-from functools import lru_cache
 import hashlib
 import numpy as np
-from sentence_transformers import SentenceTransformer, util
+from sentence_transformers import CrossEncoder
 
 
 class NLIVerifier:
@@ -25,29 +24,33 @@ class NLIVerifier:
     - premise = support_text (source evidence)
     - hypothesis = statement (claim to verify)
     
+    Uses cross-encoder models that process both texts together to predict
+    contradiction/neutral/entailment relationship.
+    
     Higher scores indicate stronger semantic entailment.
     """
     
     def __init__(
         self, 
-        model_name: str = "all-MiniLM-L6-v2",
+        model_name: str = "cross-encoder/nli-deberta-v3-base",
         cache_size: int = 10000,
         device: Optional[str] = None
     ):
-        """Initialize NLI verifier with specified model.
+        """Initialize NLI verifier with specified cross-encoder model.
         
         Args:
-            model_name: Sentence-transformers model name
-                       Default: all-MiniLM-L6-v2 (80MB, fast, good quality)
-            cache_size: Maximum number of cached embeddings
+            model_name: Cross-encoder model name
+                       Default: cross-encoder/nli-deberta-v3-base (400MB, accurate NLI)
+                       Alternative: microsoft/deberta-v3-base (fine-tuned for NLI)
+            cache_size: Maximum number of cached predictions
             device: Device to run model on ('cuda', 'cpu', or None for auto)
         """
         self.model_name = model_name
         self.cache_size = cache_size
-        self._embedding_cache: Dict[str, np.ndarray] = {}
+        self._prediction_cache: Dict[str, float] = {}
         
         # Load model (lazy initialization on first use)
-        self._model: Optional[SentenceTransformer] = None
+        self._model: Optional[CrossEncoder] = None
         self._device = device
         
         # Statistics tracking
@@ -57,39 +60,44 @@ class NLIVerifier:
     def _ensure_model_loaded(self) -> None:
         """Lazy load the model on first use."""
         if self._model is None:
-            self._model = SentenceTransformer(self.model_name, device=self._device)
+            self._model = CrossEncoder(self.model_name, device=self._device)
     
-    def _get_text_hash(self, text: str) -> str:
-        """Generate hash for cache key."""
-        return hashlib.md5(text.encode('utf-8')).hexdigest()
+    def _get_pair_hash(self, premise: str, hypothesis: str) -> str:
+        """Generate hash for (premise, hypothesis) pair cache key."""
+        combined = f"{premise}|||{hypothesis}"
+        return hashlib.md5(combined.encode('utf-8')).hexdigest()
     
-    def _get_embedding(self, text: str) -> np.ndarray:
-        """Get embedding for text, using cache if available.
+    def _get_cached_prediction(self, premise: str, hypothesis: str) -> Optional[float]:
+        """Get cached prediction if available.
         
         Args:
-            text: Text to embed
+            premise: Support text
+            hypothesis: Claim statement
             
         Returns:
-            Embedding vector
+            Cached entailment score or None if not cached
         """
-        self._ensure_model_loaded()
+        pair_hash = self._get_pair_hash(premise, hypothesis)
         
-        text_hash = self._get_text_hash(text)
-        
-        # Check cache
-        if text_hash in self._embedding_cache:
+        if pair_hash in self._prediction_cache:
             self.cache_hits += 1
-            return self._embedding_cache[text_hash]
+            return self._prediction_cache[pair_hash]
         
-        # Compute embedding
         self.cache_misses += 1
-        embedding = self._model.encode(text, convert_to_tensor=False)
+        return None
+    
+    def _cache_prediction(self, premise: str, hypothesis: str, score: float) -> None:
+        """Store prediction in cache.
         
-        # Store in cache (with size limit)
-        if len(self._embedding_cache) < self.cache_size:
-            self._embedding_cache[text_hash] = embedding
-        
-        return embedding
+        Args:
+            premise: Support text
+            hypothesis: Claim statement
+            score: Entailment score to cache
+        """
+        # Only cache if under size limit
+        if len(self._prediction_cache) < self.cache_size:
+            pair_hash = self._get_pair_hash(premise, hypothesis)
+            self._prediction_cache[pair_hash] = score
     
     def compute_entailment(
         self, 
@@ -105,26 +113,43 @@ class NLIVerifier:
         Returns:
             Entailment score in [0, 1] range
             Higher scores indicate stronger entailment
+            
+        Note:
+            Cross-encoder outputs logits for [contradiction, neutral, entailment].
+            We convert to softmax probabilities and return the entailment probability.
         """
-        # Get embeddings
-        premise_emb = self._get_embedding(premise)
-        hypothesis_emb = self._get_embedding(hypothesis)
+        # Check cache first
+        cached_score = self._get_cached_prediction(premise, hypothesis)
+        if cached_score is not None:
+            return cached_score
         
-        # Compute cosine similarity
-        similarity = util.cos_sim(premise_emb, hypothesis_emb)
+        # Ensure model is loaded
+        self._ensure_model_loaded()
         
-        # Convert to scalar and normalize to [0, 1]
-        if isinstance(similarity, np.ndarray):
-            score = float(similarity[0][0]) if similarity.ndim > 1 else float(similarity[0])
-        else:
-            score = float(similarity)
+        # Predict using cross-encoder
+        # Model returns logits for [contradiction, neutral, entailment]
+        logits = self._model.predict([(premise, hypothesis)], convert_to_numpy=True)
         
-        # Cosine similarity is in [-1, 1], normalize to [0, 1]
-        # We use (score + 1) / 2 transformation
-        normalized_score = (score + 1) / 2
+        # Convert logits to probabilities using softmax
+        if isinstance(logits, np.ndarray):
+            if logits.ndim > 1:
+                logits = logits[0]  # Get first (and only) prediction
+        
+        # Apply softmax to get probabilities
+        exp_logits = np.exp(logits - np.max(logits))  # Numerical stability
+        probabilities = exp_logits / np.sum(exp_logits)
+        
+        # Extract entailment probability (index 1)
+        # Model labels: {0: 'contradiction', 1: 'entailment', 2: 'neutral'}
+        entailment_score = float(probabilities[1])
         
         # Clamp to [0, 1] to avoid floating point precision issues
-        return float(np.clip(normalized_score, 0.0, 1.0))
+        entailment_score = float(np.clip(entailment_score, 0.0, 1.0))
+        
+        # Cache the result
+        self._cache_prediction(premise, hypothesis, entailment_score)
+        
+        return entailment_score
     
     def compute_entailment_batch(
         self, 
@@ -145,29 +170,42 @@ class NLIVerifier:
         
         self._ensure_model_loaded()
         
-        # Separate into premises and hypotheses
-        premises = [p for p, h in premise_hypothesis_pairs]
-        hypotheses = [h for p, h in premise_hypothesis_pairs]
+        # Separate cached vs uncached pairs
+        scores = [None] * len(premise_hypothesis_pairs)
+        uncached_indices = []
+        uncached_pairs = []
         
-        # Get embeddings (uses cache where possible)
-        premise_embs = [self._get_embedding(p) for p in premises]
-        hypothesis_embs = [self._get_embedding(h) for h in hypotheses]
-        
-        # Compute pairwise similarities
-        scores = []
-        for premise_emb, hypothesis_emb in zip(premise_embs, hypothesis_embs):
-            similarity = util.cos_sim(premise_emb, hypothesis_emb)
-            
-            if isinstance(similarity, np.ndarray):
-                score = float(similarity[0][0]) if similarity.ndim > 1 else float(similarity[0])
+        for i, (premise, hypothesis) in enumerate(premise_hypothesis_pairs):
+            cached_score = self._get_cached_prediction(premise, hypothesis)
+            if cached_score is not None:
+                scores[i] = cached_score
             else:
-                score = float(similarity)
+                uncached_indices.append(i)
+                uncached_pairs.append((premise, hypothesis))
+        
+        # Batch predict uncached pairs
+        if uncached_pairs:
+            # Get logits for all pairs
+            logits_batch = self._model.predict(uncached_pairs, convert_to_numpy=True)
             
-            # Normalize to [0, 1]
-            normalized_score = (score + 1) / 2
-            
-            # Clamp to [0, 1] to avoid floating point precision issues
-            scores.append(float(np.clip(normalized_score, 0.0, 1.0)))
+            # Process each prediction
+            for i, logits in enumerate(logits_batch):
+                # Apply softmax to get probabilities
+                exp_logits = np.exp(logits - np.max(logits))
+                probabilities = exp_logits / np.sum(exp_logits)
+                
+                # Extract entailment probability (index 1)
+                # Model labels: {0: 'contradiction', 1: 'entailment', 2: 'neutral'}
+                entailment_score = float(probabilities[1])
+                entailment_score = float(np.clip(entailment_score, 0.0, 1.0))
+                
+                # Store in results
+                original_idx = uncached_indices[i]
+                scores[original_idx] = entailment_score
+                
+                # Cache the result
+                premise, hypothesis = uncached_pairs[i]
+                self._cache_prediction(premise, hypothesis, entailment_score)
         
         return scores
     
@@ -181,16 +219,16 @@ class NLIVerifier:
         hit_rate = self.cache_hits / total_requests if total_requests > 0 else 0.0
         
         return {
-            "cache_size": len(self._embedding_cache),
+            "cache_size": len(self._prediction_cache),
             "cache_max_size": self.cache_size,
             "cache_hits": self.cache_hits,
             "cache_misses": self.cache_misses,
             "hit_rate": hit_rate,
-            "utilization": len(self._embedding_cache) / self.cache_size
+            "utilization": len(self._prediction_cache) / self.cache_size
         }
     
     def clear_cache(self) -> None:
-        """Clear embedding cache and reset statistics."""
-        self._embedding_cache.clear()
+        """Clear prediction cache and reset statistics."""
+        self._prediction_cache.clear()
         self.cache_hits = 0
         self.cache_misses = 0
