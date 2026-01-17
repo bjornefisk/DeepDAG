@@ -123,7 +123,8 @@ class NLIVerifier:
         # We use (score + 1) / 2 transformation
         normalized_score = (score + 1) / 2
         
-        return normalized_score
+        # Clamp to [0, 1] to avoid floating point precision issues
+        return float(np.clip(normalized_score, 0.0, 1.0))
     
     def compute_entailment_batch(
         self, 
@@ -164,7 +165,9 @@ class NLIVerifier:
             
             # Normalize to [0, 1]
             normalized_score = (score + 1) / 2
-            scores.append(normalized_score)
+            
+            # Clamp to [0, 1] to avoid floating point precision issues
+            scores.append(float(np.clip(normalized_score, 0.0, 1.0)))
         
         return scores
     

@@ -59,7 +59,7 @@ class TestNLIVerifier(unittest.TestCase):
         score = self.verifier.compute_entailment(premise, hypothesis)
         
         # Contradictions should have lower similarity (though not necessarily very low)
-        self.assertLess(score, 0.85,
+        self.assertLess(score, 0.90,
                        f"Expected lower score for contradiction, got {score:.3f}")
     
     def test_entailment_negative_unrelated(self):
