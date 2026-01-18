@@ -244,7 +244,8 @@ class TestSSEEndpoint(unittest.TestCase):
         # Import app here to avoid circular imports
         from HDRP.dashboard.app import app
         self.app = app
-        self.client = app.test_client()
+        # Use app.server to access the underlying Flask app
+        self.client = app.server.test_client()
         self.executor = get_executor()
 
     def test_sse_endpoint_not_found(self):
@@ -388,6 +389,16 @@ class TestSSEEndpoint(unittest.TestCase):
         # Create multiple subscriptions
         queue1 = self.executor.subscribe(run_id)
         queue2 = self.executor.subscribe(run_id)
+        
+        # Clear initial statuses sent on subscription
+        try:
+            queue1.get_nowait()
+        except queue.Empty:
+            pass
+        try:
+            queue2.get_nowait()
+        except queue.Empty:
+            pass
         
         # Update progress - both should receive it
         self.executor._update_progress(
