@@ -1,0 +1,103 @@
+{
+  "timestamp": "2026-01-20T13:01:51.741517",
+  "test_cases_count": 23,
+  "category_counts": {
+    "paraphrase": 5,
+    "contradiction": 5,
+    "partial_overlap": 5,
+    "entailment": 5,
+    "irrelevant": 3
+  },
+  "heuristic_results": {
+    "method": "heuristic",
+    "true_positives": 0,
+    "false_positives": 4,
+    "true_negatives": 9,
+    "false_negatives": 10,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1_score": 0.0,
+    "avg_processing_time_ms": 0.1513957977294922,
+    "category_breakdown": {
+      "paraphrase": {
+        "tp": 0,
+        "fp": 0,
+        "tn": 0,
+        "fn": 5
+      },
+      "contradiction": {
+        "tp": 0,
+        "fp": 2,
+        "tn": 3,
+        "fn": 0
+      },
+      "partial_overlap": {
+        "tp": 0,
+        "fp": 2,
+        "tn": 3,
+        "fn": 0
+      },
+      "entailment": {
+        "tp": 0,
+        "fp": 0,
+        "tn": 0,
+        "fn": 5
+      },
+      "irrelevant": {
+        "tp": 0,
+        "fp": 0,
+        "tn": 3,
+        "fn": 0
+      }
+    }
+  },
+  "nli_results": {
+    "method": "nli",
+    "true_positives": 7,
+    "false_positives": 0,
+    "true_negatives": 13,
+    "false_negatives": 3,
+    "precision": 1.0,
+    "recall": 0.7,
+    "f1_score": 0.8235294117647058,
+    "avg_processing_time_ms": 4571.173667907715,
+    "category_breakdown": {
+      "paraphrase": {
+        "tp": 2,
+        "fp": 0,
+        "tn": 0,
+        "fn": 3
+      },
+      "contradiction": {
+        "tp": 0,
+        "fp": 0,
+        "tn": 5,
+        "fn": 0
+      },
+      "partial_overlap": {
+        "tp": 0,
+        "fp": 0,
+        "tn": 5,
+        "fn": 0
+      },
+      "entailment": {
+        "tp": 5,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0
+      },
+      "irrelevant": {
+        "tp": 0,
+        "fp": 0,
+        "tn": 3,
+        "fn": 0
+      }
+    }
+  },
+  "improvements": {
+    "f1": 0.8235294117647058,
+    "precision": 1.0,
+    "recall": 0.7
+  },
+  "target_met": true
+}
