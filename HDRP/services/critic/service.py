@@ -16,7 +16,16 @@ class CriticService:
     
     Optimized with batch verification and tokenization caching.
     """
-    def __init__(self, run_id: Optional[str] = None, use_nli: bool = True, nli_threshold: float = 0.65):
+    def __init__(self, run_id: Optional[str] = None, use_nli: bool = True, nli_threshold: float = 0.60):
+        """Initialize CriticService.
+        
+        Args:
+            run_id: Optional run ID for logging
+            use_nli: Whether to use NLI-based verification (True) or heuristic fallback (False)
+            nli_threshold: NLI entailment score threshold for accepting claims
+                          Default 0.60 determined via grid search optimization (see artifacts/threshold_optimization.json)
+                          Previous hardcoded value of 0.65 was too strict, causing false negatives
+        """
         self.logger = ResearchLogger("critic", run_id=run_id)
         self.enable_profiling = enable_profiling_env()
         self._tokenization_cache: Dict[str, List[str]] = {}

@@ -129,7 +129,9 @@ def benchmark_method(
         BenchmarkResult with performance metrics
     """
     use_nli = (method == "nli")
-    critic = CriticService(use_nli=use_nli, nli_threshold=0.65)
+    # Use empirically optimized threshold (0.60) instead of arbitrary 0.65
+    # See artifacts/threshold_optimization.json for grid search results
+    critic = CriticService(use_nli=use_nli, nli_threshold=0.60)
     
     start_time = time.time()
     results = critic.verify(claims, task=test_query.question)
