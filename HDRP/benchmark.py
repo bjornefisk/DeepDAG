@@ -103,8 +103,8 @@ def run_benchmark(
                 "max": max(latencies),
                 "mean": statistics.mean(latencies),
                 "median": statistics.median(latencies),
-                "p95": sorted(latencies)[int(len(latencies) * 0.95)] if len(latencies) > 1 else latencies[0],
-                "p99": sorted(latencies)[int(len(latencies) * 0.99)] if len(latencies) > 1 else latencies[0],
+                "p95": sorted(latencies)[min(int(len(latencies) * 0.95), len(latencies) - 1)] if len(latencies) > 1 else latencies[0],
+                "p99": sorted(latencies)[min(int(len(latencies) * 0.99), len(latencies) - 1)] if len(latencies) > 1 else latencies[0],
                 "stdev": statistics.stdev(latencies) if len(latencies) > 1 else 0,
                 "all_latencies": latencies,
             }
