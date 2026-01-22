@@ -33,6 +33,11 @@ nli:
     - CUDAExecutionProvider
     - CPUExecutionProvider
   int8: false
+  chunking:
+    enabled: true
+    chunk_tokens: 256
+    overlap_tokens: 64
+    aggregation: max
 
 # Production-grade concurrency
 concurrency:

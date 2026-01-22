@@ -217,6 +217,26 @@ class TestNLIVerifierEdgeCases(unittest.TestCase):
         self.assertIsInstance(score, float)
         self.assertGreaterEqual(score, 0.0)
         self.assertLessEqual(score, 1.0)
+
+    def test_chunking_path_for_long_text(self):
+        """Verify chunking splits long premises and returns a valid score."""
+        verifier = NLIVerifier(
+            max_length=64,
+            chunking_enabled=True,
+            chunk_tokens=32,
+            overlap_tokens=8,
+            chunk_aggregation="max",
+        )
+        long_text = "This is a test sentence. " * 200
+        short_text = "This is a test sentence."
+
+        chunks = verifier._chunk_premise(long_text, short_text)
+        self.assertGreater(len(chunks), 1)
+
+        score = verifier.compute_entailment(long_text, short_text)
+        self.assertIsInstance(score, float)
+        self.assertGreaterEqual(score, 0.0)
+        self.assertLessEqual(score, 1.0)
     
     def test_special_characters(self):
         """Verify handling of special characters."""

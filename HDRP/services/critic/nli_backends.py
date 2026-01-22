@@ -28,6 +28,7 @@ class TorchCrossEncoderBackend:
         max_length: int,
     ) -> None:
         from sentence_transformers import CrossEncoder
+        from transformers import AutoTokenizer
 
         resolved_device = _resolve_torch_device(device)
         self.model = CrossEncoder(
@@ -35,6 +36,7 @@ class TorchCrossEncoderBackend:
             device=resolved_device,
             max_length=max_length,
         )
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         self.batch_size = batch_size
 
     def predict_logits(self, pairs: List[Tuple[str, str]]) -> np.ndarray:

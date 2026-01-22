@@ -41,6 +41,10 @@ class NLIVerifier:
         onnx_model_path: Optional[str] = None,
         onnx_providers: Optional[List[str]] = None,
         int8: Optional[bool] = None,
+        chunking_enabled: Optional[bool] = None,
+        chunk_tokens: Optional[int] = None,
+        overlap_tokens: Optional[int] = None,
+        chunk_aggregation: Optional[str] = None,
     ):
         """Initialize NLI verifier with specified cross-encoder model.
         
@@ -65,6 +69,14 @@ class NLIVerifier:
         self.onnx_model_path = onnx_model_path or nli_settings.onnx_model_path
         self.onnx_providers = onnx_providers or nli_settings.onnx_providers
         self.int8 = nli_settings.int8 if int8 is None else int8
+        self.chunking_enabled = (
+            nli_settings.chunking.enabled
+            if chunking_enabled is None
+            else chunking_enabled
+        )
+        self.chunk_tokens = chunk_tokens or nli_settings.chunking.chunk_tokens
+        self.overlap_tokens = overlap_tokens or nli_settings.chunking.overlap_tokens
+        self.chunk_aggregation = chunk_aggregation or nli_settings.chunking.aggregation
 
         # Load backend (lazy initialization on first use)
         self._backend = None
@@ -97,6 +109,78 @@ class NLIVerifier:
                 )
             else:
                 raise ValueError(f"Unsupported NLI backend: {self.backend}")
+
+    def _get_tokenizer(self):
+        self._ensure_model_loaded()
+        tokenizer = getattr(self._backend, "tokenizer", None)
+        if tokenizer is None:
+            from transformers import AutoTokenizer
+
+            tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=True)
+        return tokenizer
+
+    def _chunk_premise(self, premise: str, hypothesis: str) -> List[str]:
+        if not self.chunking_enabled:
+            return [premise]
+
+        tokenizer = self._get_tokenizer()
+        premise_tokens = tokenizer.encode(premise, add_special_tokens=False)
+        hypothesis_tokens = tokenizer.encode(hypothesis, add_special_tokens=False)
+
+        available_premise_tokens = max(self.max_length - len(hypothesis_tokens) - 3, 1)
+        chunk_size = max(1, min(self.chunk_tokens, available_premise_tokens))
+        if len(premise_tokens) <= chunk_size:
+            return [premise]
+
+        overlap = min(max(self.overlap_tokens, 0), chunk_size - 1)
+        step = max(1, chunk_size - overlap)
+        chunks = []
+        for start in range(0, len(premise_tokens), step):
+            window = premise_tokens[start:start + chunk_size]
+            if not window:
+                break
+            chunk_text = tokenizer.decode(
+                window, skip_special_tokens=True, clean_up_tokenization_spaces=True
+            )
+            chunks.append(chunk_text)
+            if start + chunk_size >= len(premise_tokens):
+                break
+
+        return chunks or [premise]
+
+    def _aggregate_scores(self, scores: List[float]) -> float:
+        if not scores:
+            return 0.0
+        if self.chunk_aggregation == "mean":
+            return float(np.mean(scores))
+        if self.chunk_aggregation == "median":
+            return float(np.median(scores))
+        return float(np.max(scores))
+
+    def _score_pairs(self, pairs: List[Tuple[str, str]]) -> List[float]:
+        logits = self._backend.predict_logits(pairs)
+        logits = np.asarray(logits)
+        if logits.ndim == 1:
+            logits = np.expand_dims(logits, axis=0)
+
+        scores = []
+        for row in logits:
+            exp_logits = np.exp(row - np.max(row))
+            probabilities = exp_logits / np.sum(exp_logits)
+            entailment_score = float(np.clip(probabilities[1], 0.0, 1.0))
+            scores.append(entailment_score)
+        return scores
+
+    def _compute_entailment_uncached(self, premise: str, hypothesis: str) -> float:
+        self._ensure_model_loaded()
+        chunks = self._chunk_premise(premise, hypothesis)
+        if len(chunks) == 1:
+            scores = self._score_pairs([(premise, hypothesis)])
+            return scores[0]
+
+        pairs = [(chunk, hypothesis) for chunk in chunks]
+        scores = self._score_pairs(pairs)
+        return self._aggregate_scores(scores)
     
     def _get_pair_hash(self, premise: str, hypothesis: str) -> str:
         """Generate hash for (premise, hypothesis) pair cache key."""
@@ -159,28 +243,7 @@ class NLIVerifier:
         if cached_score is not None:
             return cached_score
         
-        # Ensure model is loaded
-        self._ensure_model_loaded()
-        
-        # Predict using cross-encoder
-        # Model returns logits for [contradiction, neutral, entailment]
-        logits = self._backend.predict_logits([(premise, hypothesis)])
-        
-        # Convert logits to probabilities using softmax
-        logits = np.asarray(logits)
-        if logits.ndim > 1:
-            logits = logits[0]  # Get first (and only) prediction
-        
-        # Apply softmax to get probabilities
-        exp_logits = np.exp(logits - np.max(logits))  # Numerical stability
-        probabilities = exp_logits / np.sum(exp_logits)
-        
-        # Extract entailment probability (index 1)
-        # Model labels: {0: 'contradiction', 1: 'entailment', 2: 'neutral'}
-        entailment_score = float(probabilities[1])
-        
-        # Clamp to [0, 1] to avoid floating point precision issues
-        entailment_score = float(np.clip(entailment_score, 0.0, 1.0))
+        entailment_score = self._compute_entailment_uncached(premise, hypothesis)
         
         # Cache the result
         self._cache_prediction(premise, hypothesis, entailment_score)
@@ -221,29 +284,32 @@ class NLIVerifier:
         
         # Batch predict uncached pairs
         if uncached_pairs:
-            # Get logits for all pairs
-            logits_batch = np.asarray(self._backend.predict_logits(uncached_pairs))
-            if logits_batch.ndim == 1:
-                logits_batch = np.expand_dims(logits_batch, axis=0)
-            
-            # Process each prediction
-            for i, logits in enumerate(logits_batch):
-                # Apply softmax to get probabilities
-                exp_logits = np.exp(logits - np.max(logits))
-                probabilities = exp_logits / np.sum(exp_logits)
-                
-                # Extract entailment probability (index 1)
-                # Model labels: {0: 'contradiction', 1: 'entailment', 2: 'neutral'}
-                entailment_score = float(probabilities[1])
-                entailment_score = float(np.clip(entailment_score, 0.0, 1.0))
-                
-                # Store in results
-                original_idx = uncached_indices[i]
-                scores[original_idx] = entailment_score
-                
-                # Cache the result
-                premise, hypothesis = uncached_pairs[i]
-                self._cache_prediction(premise, hypothesis, entailment_score)
+            simple_pairs = []
+            simple_map = []
+            chunked_pairs = []
+            chunked_map = []
+
+            for idx, (premise, hypothesis) in zip(uncached_indices, uncached_pairs):
+                chunks = self._chunk_premise(premise, hypothesis)
+                if len(chunks) == 1:
+                    simple_pairs.append((premise, hypothesis))
+                    simple_map.append(idx)
+                else:
+                    chunked_pairs.append((premise, hypothesis))
+                    chunked_map.append(idx)
+
+            if simple_pairs:
+                simple_scores = self._score_pairs(simple_pairs)
+                for idx, score in zip(simple_map, simple_scores):
+                    scores[idx] = score
+                    premise, hypothesis = premise_hypothesis_pairs[idx]
+                    self._cache_prediction(premise, hypothesis, score)
+
+            for idx in chunked_map:
+                premise, hypothesis = premise_hypothesis_pairs[idx]
+                score = self._compute_entailment_uncached(premise, hypothesis)
+                scores[idx] = score
+                self._cache_prediction(premise, hypothesis, score)
         
         return scores
     

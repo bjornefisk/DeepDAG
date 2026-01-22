@@ -48,6 +48,14 @@ class SearchConfig(BaseSettings):
 
 # === NLI Configuration ===
 
+class NLIChunkingConfig(BaseSettings):
+    """Chunking configuration for long premises."""
+    enabled: bool = Field(True, env="HDRP_NLI_CHUNKING_ENABLED")
+    chunk_tokens: int = Field(256, env="HDRP_NLI_CHUNK_TOKENS")
+    overlap_tokens: int = Field(64, env="HDRP_NLI_CHUNK_OVERLAP")
+    aggregation: Literal["max", "mean", "median"] = Field("max", env="HDRP_NLI_CHUNK_AGG")
+
+
 class NLIConfig(BaseSettings):
     """NLI inference configuration."""
     backend: Literal["torch", "onnxruntime"] = Field("torch", env="HDRP_NLI_BACKEND")
@@ -57,6 +65,7 @@ class NLIConfig(BaseSettings):
     onnx_model_path: Optional[str] = Field(None, env="HDRP_NLI_ONNX_PATH")
     onnx_providers: List[str] = Field(default_factory=list, env="HDRP_NLI_ONNX_PROVIDERS")
     int8: bool = Field(False, env="HDRP_NLI_INT8")
+    chunking: NLIChunkingConfig = NLIChunkingConfig()
 
     @validator("onnx_providers", pre=True)
     def normalize_onnx_providers(cls, v):

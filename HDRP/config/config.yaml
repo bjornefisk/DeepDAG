@@ -53,6 +53,12 @@ nli:
     - CPUExecutionProvider
   # Flag to indicate INT8-quantized ONNX model usage
   int8: false
+  # Long premise chunking
+  chunking:
+    enabled: true
+    chunk_tokens: 256
+    overlap_tokens: 64
+    aggregation: max
 
 # Concurrency & Performance
 concurrency:
