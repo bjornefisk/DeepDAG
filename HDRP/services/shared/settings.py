@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Optional, Literal, List
 
 import yaml
-from pydantic import BaseSettings, SecretStr, Field, validator
+from pydantic import Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 # === Search Configuration ===
@@ -67,7 +68,7 @@ class NLIConfig(BaseSettings):
     int8: bool = Field(False, env="HDRP_NLI_INT8")
     chunking: NLIChunkingConfig = NLIChunkingConfig()
 
-    @validator("onnx_providers", pre=True)
+    @field_validator("onnx_providers", mode="before")
     def normalize_onnx_providers(cls, v):
         if v is None or v == "":
             return []
@@ -196,13 +197,14 @@ class HDRPSettings(BaseSettings):
     observability: ObservabilityConfig = ObservabilityConfig()
     secrets: SecretsConfig = SecretsConfig()
 
-    class Config:
-        env_file = ".env"
-        env_nested_delimiter = "__"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_nested_delimiter="__",
+        case_sensitive=False,
+    )
 
-    @validator("*", pre=True, always=True)
-    def load_from_yaml(cls, v, field):
+    @field_validator("*", mode="before")
+    def load_from_yaml(cls, v):
         """Load values from YAML config file if not already set."""
         # This validator will be called for each field
         # We'll load the YAML in get_settings() instead
@@ -267,6 +269,47 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+def _normalize_yaml_config(config: dict) -> dict:
+    """Normalize YAML config to match settings schema."""
+    if not isinstance(config, dict):
+        return config
+
+    normalized = config.copy()
+
+    services = normalized.get("services")
+    if isinstance(services, dict):
+        for service_name in ("principal", "researcher", "critic", "synthesizer"):
+            value = services.get(service_name)
+            if isinstance(value, dict) and "address" in value:
+                services[service_name] = value["address"]
+
+    concurrency = normalized.get("concurrency")
+    if isinstance(concurrency, dict):
+        lock = concurrency.get("lock")
+        if isinstance(lock, dict):
+            etcd = lock.get("etcd")
+            if isinstance(etcd, dict) and "endpoints" in etcd and "etcd_endpoints" not in lock:
+                lock["etcd_endpoints"] = etcd.get("endpoints")
+            redis = lock.get("redis")
+            if isinstance(redis, dict) and "address" in redis and "redis_address" not in lock:
+                lock["redis_address"] = redis.get("address")
+            lock.pop("etcd", None)
+            lock.pop("redis", None)
+
+    storage = normalized.get("storage")
+    if isinstance(storage, dict):
+        logs = storage.get("logs")
+        if isinstance(logs, dict) and "directory" in logs and "logs_directory" not in storage:
+            storage["logs_directory"] = logs.get("directory")
+        artifacts = storage.get("artifacts")
+        if isinstance(artifacts, dict) and "directory" in artifacts and "artifacts_directory" not in storage:
+            storage["artifacts_directory"] = artifacts.get("directory")
+        storage.pop("logs", None)
+        storage.pop("artifacts", None)
+
+    return normalized
+
+
 def _flatten_config(config: dict, parent_key: str = "", sep: str = "__") -> dict:
     """Flatten nested config dict for Pydantic env var parsing.
     
@@ -308,12 +351,10 @@ def get_settings(config_path: Optional[Path] = None) -> HDRPSettings:
     """
     # Load YAML config
     yaml_config = _load_yaml_config(config_path)
-    
-    # Flatten for Pydantic parsing
-    flat_config = _flatten_config(yaml_config)
-    
+    normalized_config = _normalize_yaml_config(yaml_config)
+
     # Create settings (env vars will override YAML values)
-    return HDRPSettings(**flat_config)
+    return HDRPSettings(**normalized_config)
 
 
 def reload_settings(config_path: Optional[Path] = None) -> HDRPSettings:

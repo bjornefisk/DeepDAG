@@ -255,57 +255,18 @@ def _run_pipeline(
 
 
 
-@app.callback(invoke_without_command=True)
-def run(
-    ctx: typer.Context,
-    query: str = typer.Option(
-        ...,
-        "--query",
-        "-q",
-        help="Research query or objective to investigate.",
-    ),
-    mode: str = typer.Option(
-        "python",
-        "--mode",
-        "-m",
-        help="Execution mode: 'python' (direct pipeline) or 'orchestrator' (Go DAG execution).",
-    ),
-    provider: Optional[str] = typer.Option(
-        None,
-        "--provider",
-        "-p",
-        help=(
-            "Search provider to use ('google' or 'simulated'). "
-            "If omitted, HDRP_SEARCH_PROVIDER/GOOGLE_* env vars are used."
-        ),
-    ),
-    api_key: Optional[str] = typer.Option(
-        None,
-        "--api-key",
-        help="Explicit API key for Google; overrides GOOGLE_API_KEY when set.",
-    ),
-
-    output: Optional[str] = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="If provided, write the final report to this file instead of stdout.",
-    ),
-    verbose: bool = typer.Option(
-        False,
-        "--verbose",
-        "-v",
-        help="Enable verbose logging to the terminal.",
-    ),
+def _run_cli(
+    query: str,
+    mode: str,
+    provider: Optional[str],
+    api_key: Optional[str],
+    output: Optional[str],
+    verbose: bool,
 ) -> None:
     """Run a single HDRP research query."""
-    # Only execute if no subcommand was invoked
-    if ctx.invoked_subcommand is not None:
-        return
-    
     provider_display = provider or "auto"
     mode_display = mode.upper()
-    
+
     console.print(
         Panel.fit(
             f"[bold cyan]HDRP Research[/bold cyan]\n\n"
@@ -335,6 +296,101 @@ def run(
         )
 
     raise typer.Exit(code=exit_code)
+
+
+@app.callback(invoke_without_command=True)
+def main_callback(
+    ctx: typer.Context,
+    query: Optional[str] = typer.Option(
+        None,
+        "--query",
+        "-q",
+        help="Research query or objective to investigate.",
+    ),
+    mode: str = typer.Option(
+        "python",
+        "--mode",
+        "-m",
+        help="Execution mode: 'python' (direct pipeline) or 'orchestrator' (Go DAG execution).",
+    ),
+    provider: Optional[str] = typer.Option(
+        None,
+        "--provider",
+        "-p",
+        help=(
+            "Search provider to use ('google' or 'simulated'). "
+            "If omitted, HDRP_SEARCH_PROVIDER/GOOGLE_* env vars are used."
+        ),
+    ),
+    api_key: Optional[str] = typer.Option(
+        None,
+        "--api-key",
+        help="Explicit API key for Google; overrides GOOGLE_API_KEY when set.",
+    ),
+    output: Optional[str] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="If provided, write the final report to this file instead of stdout.",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Enable verbose logging to the terminal.",
+    ),
+) -> None:
+    """Run a single HDRP research query (default command)."""
+    if ctx.invoked_subcommand is not None:
+        return
+    if query is None:
+        raise typer.MissingParameter(param=ctx.command.params[0])
+    _run_cli(query, mode, provider, api_key, output, verbose)
+
+
+@app.command("run")
+def run_command(
+    query: str = typer.Option(
+        ...,
+        "--query",
+        "-q",
+        help="Research query or objective to investigate.",
+    ),
+    mode: str = typer.Option(
+        "python",
+        "--mode",
+        "-m",
+        help="Execution mode: 'python' (direct pipeline) or 'orchestrator' (Go DAG execution).",
+    ),
+    provider: Optional[str] = typer.Option(
+        None,
+        "--provider",
+        "-p",
+        help=(
+            "Search provider to use ('google' or 'simulated'). "
+            "If omitted, HDRP_SEARCH_PROVIDER/GOOGLE_* env vars are used."
+        ),
+    ),
+    api_key: Optional[str] = typer.Option(
+        None,
+        "--api-key",
+        help="Explicit API key for Google; overrides GOOGLE_API_KEY when set.",
+    ),
+    output: Optional[str] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="If provided, write the final report to this file instead of stdout.",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Enable verbose logging to the terminal.",
+    ),
+) -> None:
+    """Run a single HDRP research query."""
+    _run_cli(query, mode, provider, api_key, output, verbose)
 
 
 def run_query_programmatic(
