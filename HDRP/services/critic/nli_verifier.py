@@ -14,7 +14,7 @@ This module provides:
 from typing import List, Tuple, Dict, Optional
 import hashlib
 import numpy as np
-from sentence_transformers import CrossEncoder
+from HDRP.services.shared.settings import get_settings
 
 
 class NLIVerifier:
@@ -34,7 +34,13 @@ class NLIVerifier:
         self, 
         model_name: str = "cross-encoder/nli-deberta-v3-base",
         cache_size: int = 10000,
-        device: Optional[str] = None
+        device: Optional[str] = None,
+        backend: Optional[str] = None,
+        batch_size: Optional[int] = None,
+        max_length: Optional[int] = None,
+        onnx_model_path: Optional[str] = None,
+        onnx_providers: Optional[List[str]] = None,
+        int8: Optional[bool] = None,
     ):
         """Initialize NLI verifier with specified cross-encoder model.
         
@@ -45,13 +51,23 @@ class NLIVerifier:
             cache_size: Maximum number of cached predictions
             device: Device to run model on ('cuda', 'cpu', or None for auto)
         """
+        settings = get_settings()
+        nli_settings = settings.nli
+
         self.model_name = model_name
         self.cache_size = cache_size
         self._prediction_cache: Dict[str, float] = {}
         
-        # Load model (lazy initialization on first use)
-        self._model: Optional[CrossEncoder] = None
-        self._device = device
+        self.backend = (backend or nli_settings.backend).lower()
+        self.device = device or nli_settings.device
+        self.batch_size = batch_size or nli_settings.batch_size
+        self.max_length = max_length or nli_settings.max_length
+        self.onnx_model_path = onnx_model_path or nli_settings.onnx_model_path
+        self.onnx_providers = onnx_providers or nli_settings.onnx_providers
+        self.int8 = nli_settings.int8 if int8 is None else int8
+
+        # Load backend (lazy initialization on first use)
+        self._backend = None
         
         # Statistics tracking
         self.cache_hits = 0
@@ -59,8 +75,28 @@ class NLIVerifier:
     
     def _ensure_model_loaded(self) -> None:
         """Lazy load the model on first use."""
-        if self._model is None:
-            self._model = CrossEncoder(self.model_name, device=self._device)
+        if self._backend is None:
+            if self.backend == "onnxruntime":
+                from HDRP.services.critic.nli_backends import OnnxRuntimeBackend
+
+                self._backend = OnnxRuntimeBackend(
+                    model_name=self.model_name,
+                    onnx_model_path=self.onnx_model_path,
+                    providers=self.onnx_providers,
+                    batch_size=self.batch_size,
+                    max_length=self.max_length,
+                )
+            elif self.backend == "torch":
+                from HDRP.services.critic.nli_backends import TorchCrossEncoderBackend
+
+                self._backend = TorchCrossEncoderBackend(
+                    model_name=self.model_name,
+                    device=self.device,
+                    batch_size=self.batch_size,
+                    max_length=self.max_length,
+                )
+            else:
+                raise ValueError(f"Unsupported NLI backend: {self.backend}")
     
     def _get_pair_hash(self, premise: str, hypothesis: str) -> str:
         """Generate hash for (premise, hypothesis) pair cache key."""
@@ -128,12 +164,12 @@ class NLIVerifier:
         
         # Predict using cross-encoder
         # Model returns logits for [contradiction, neutral, entailment]
-        logits = self._model.predict([(premise, hypothesis)], convert_to_numpy=True)
+        logits = self._backend.predict_logits([(premise, hypothesis)])
         
         # Convert logits to probabilities using softmax
-        if isinstance(logits, np.ndarray):
-            if logits.ndim > 1:
-                logits = logits[0]  # Get first (and only) prediction
+        logits = np.asarray(logits)
+        if logits.ndim > 1:
+            logits = logits[0]  # Get first (and only) prediction
         
         # Apply softmax to get probabilities
         exp_logits = np.exp(logits - np.max(logits))  # Numerical stability
@@ -186,7 +222,9 @@ class NLIVerifier:
         # Batch predict uncached pairs
         if uncached_pairs:
             # Get logits for all pairs
-            logits_batch = self._model.predict(uncached_pairs, convert_to_numpy=True)
+            logits_batch = np.asarray(self._backend.predict_logits(uncached_pairs))
+            if logits_batch.ndim == 1:
+                logits_batch = np.expand_dims(logits_batch, axis=0)
             
             # Process each prediction
             for i, logits in enumerate(logits_batch):

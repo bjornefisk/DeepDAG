@@ -14,7 +14,7 @@ Usage:
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 
 import yaml
 from pydantic import BaseSettings, SecretStr, Field, validator
@@ -44,6 +44,27 @@ class SearchConfig(BaseSettings):
     provider: str = Field("simulated", env="HDRP_SEARCH_PROVIDER")
     google: GoogleSearchConfig = GoogleSearchConfig()
     tavily: TavilySearchConfig = TavilySearchConfig()
+
+
+# === NLI Configuration ===
+
+class NLIConfig(BaseSettings):
+    """NLI inference configuration."""
+    backend: Literal["torch", "onnxruntime"] = Field("torch", env="HDRP_NLI_BACKEND")
+    device: str = Field("auto", env="HDRP_NLI_DEVICE")
+    batch_size: int = Field(8, env="HDRP_NLI_BATCH_SIZE")
+    max_length: int = Field(256, env="HDRP_NLI_MAX_LENGTH")
+    onnx_model_path: Optional[str] = Field(None, env="HDRP_NLI_ONNX_PATH")
+    onnx_providers: List[str] = Field(default_factory=list, env="HDRP_NLI_ONNX_PROVIDERS")
+    int8: bool = Field(False, env="HDRP_NLI_INT8")
+
+    @validator("onnx_providers", pre=True)
+    def normalize_onnx_providers(cls, v):
+        if v is None or v == "":
+            return []
+        if isinstance(v, str):
+            return [item.strip() for item in v.split(",") if item.strip()]
+        return v
 
 
 # === Service Discovery ===
@@ -159,6 +180,7 @@ class HDRPSettings(BaseSettings):
     """Main HDRP configuration."""
     environment: str = Field("development", env="HDRP_ENV")
     search: SearchConfig = SearchConfig()
+    nli: NLIConfig = NLIConfig()
     services: ServiceAddresses = ServiceAddresses()
     concurrency: ConcurrencyConfig = ConcurrencyConfig()
     storage: StorageConfig = StorageConfig()

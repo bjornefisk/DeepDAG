@@ -22,6 +22,18 @@ services:
   synthesizer:
     address: synthesizer-svc.hdrp.svc.cluster.local:50054
 
+# NLI Inference Configuration
+nli:
+  backend: torch
+  device: auto
+  batch_size: 16
+  max_length: 256
+  onnx_model_path: ""
+  onnx_providers:
+    - CUDAExecutionProvider
+    - CPUExecutionProvider
+  int8: false
+
 # Production-grade concurrency
 concurrency:
   max_workers: 20

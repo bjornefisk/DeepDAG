@@ -37,6 +37,23 @@ services:
   synthesizer:
     address: localhost:50054
 
+# NLI Inference Configuration
+nli:
+  # backend: torch | onnxruntime
+  backend: torch
+  # device: auto | cpu | cuda
+  device: auto
+  batch_size: 8
+  max_length: 256
+  # Path to exported ONNX model (for onnxruntime backend)
+  onnx_model_path: ""
+  # Execution providers used by onnxruntime (order matters)
+  onnx_providers:
+    - CUDAExecutionProvider
+    - CPUExecutionProvider
+  # Flag to indicate INT8-quantized ONNX model usage
+  int8: false
+
 # Concurrency & Performance
 concurrency:
   max_workers: 10

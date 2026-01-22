@@ -19,6 +19,13 @@ This document describes the profiling and optimization infrastructure added to D
 
 **Performance impact**: Significantly reduces verification time for large claim sets through caching and parallelization.
 
+### 3. NLI Inference Acceleration
+- **Backend selection**: Choose PyTorch or ONNX Runtime via config/env
+- **GPU/CPU auto-selection**: Configure device for deployment-specific latency targets
+- **INT8 quantization**: Optional ONNX INT8 model for faster CPU inference
+
+**Performance impact**: Reduces entailment scoring latency per claim without changing core verification logic.
+
 ### 3. Go Orchestrator
 - **pprof endpoints**: Enabled runtime profiling at `/debug/pprof/`
 - Endpoints available:
@@ -84,6 +91,22 @@ python HDRP/benchmark.py --queries 10 --provider google --api-key YOUR_KEY --out
 ### Compare Results
 ```bash
 python HDRP/benchmark.py --compare baseline.json optimized.json
+```
+
+### NLI ONNX Export and Runtime
+```bash
+# Export ONNX model (and INT8 optional)
+python HDRP/tools/eval/export_nli_onnx.py --output-dir artifacts/nli_onnx --int8
+
+# Use ONNX Runtime backend
+export HDRP_NLI_BACKEND=onnxruntime
+export HDRP_NLI_ONNX_PATH=artifacts/nli_onnx/model.onnx
+export HDRP_NLI_DEVICE=auto
+export HDRP_NLI_ONNX_PROVIDERS=CUDAExecutionProvider,CPUExecutionProvider
+
+# Use INT8 model for CPU
+export HDRP_NLI_ONNX_PATH=artifacts/nli_onnx/model.int8.onnx
+export HDRP_NLI_INT8=1
 ```
 
 This will show:
