@@ -1,5 +1,6 @@
 import json
 import os
+import ssl
 import time
 from typing import Any, Dict, List, Optional
 from urllib import error, request
@@ -98,7 +99,27 @@ class GoogleSearchProvider(SearchProvider):
         start_time = time.time()
 
         try:
-            with request.urlopen(req, timeout=self.timeout_seconds) as resp:
+            ssl_context = None
+            ca_bundle = (
+                os.getenv("GOOGLE_CA_BUNDLE")
+                or os.getenv("SSL_CERT_FILE")
+                or os.getenv("REQUESTS_CA_BUNDLE")
+            )
+            if ca_bundle:
+                ssl_context = ssl.create_default_context(cafile=ca_bundle)
+            else:
+                try:
+                    import certifi
+
+                    ssl_context = ssl.create_default_context(cafile=certifi.where())
+                except Exception:
+                    ssl_context = None
+
+            with request.urlopen(
+                req,
+                timeout=self.timeout_seconds,
+                context=ssl_context,
+            ) as resp:
                 status = resp.getcode()
                 raw_body = resp.read().decode("utf-8")
         except error.HTTPError as e:

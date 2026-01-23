@@ -163,7 +163,11 @@ class ComparisonRunner:
         return metrics
 
 
-def _build_search_provider(provider_type: str, api_key: Optional[str] = None) -> SearchProvider:
+def _build_search_provider(
+    provider_type: str,
+    api_key: Optional[str] = None,
+    cx: Optional[str] = None,
+) -> SearchProvider:
     """Build search provider based on type."""
     if provider_type == "tavily":
         if api_key:
@@ -173,6 +177,11 @@ def _build_search_provider(provider_type: str, api_key: Optional[str] = None) ->
             return SearchFactory.from_env(default_provider="tavily")
     elif provider_type == "simulated":
         return SearchFactory.get_provider("simulated")
+    elif provider_type == "google":
+        provider_kwargs = {}
+        if cx:
+            provider_kwargs["cx"] = cx
+        return SearchFactory.get_provider("google", api_key=api_key, **provider_kwargs)
     else:
         raise ValueError(f"Unknown provider type: {provider_type}")
 
@@ -187,8 +196,8 @@ Examples:
   # Run with simulated provider (fast, deterministic)
   python -m HDRP.tools.eval.compare --provider simulated
   
-  # Run with Tavily (real web search)
-  python -m HDRP.tools.eval.compare --provider tavily
+  # Run with Google Custom Search (real web search)
+  python -m HDRP.tools.eval.compare --provider google
   
   # Run only complex queries
   python -m HDRP.tools.eval.compare --complexity complex --provider simulated
@@ -200,14 +209,19 @@ Examples:
     
     parser.add_argument(
         "--provider",
-        choices=["simulated", "tavily"],
+        choices=["simulated", "tavily", "google"],
         default="simulated",
         help="Search provider to use (default: simulated)",
     )
     
     parser.add_argument(
         "--api-key",
-        help="API key for Tavily (if not set in TAVILY_API_KEY env var)",
+        help="API key for provider (if not set in env vars)",
+    )
+    
+    parser.add_argument(
+        "--cx",
+        help="Google Custom Search Engine ID (if not set in GOOGLE_CX env var)",
     )
     
     parser.add_argument(
@@ -254,7 +268,7 @@ Examples:
     
     # Build search provider
     try:
-        search_provider = _build_search_provider(args.provider, args.api_key)
+        search_provider = _build_search_provider(args.provider, args.api_key, args.cx)
     except (SearchError, APIKeyError) as e:
         console.print(f"[bold red]Configuration Error:[/bold red]\n")
         console.print(str(e))
