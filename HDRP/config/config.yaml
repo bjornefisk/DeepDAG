@@ -45,6 +45,8 @@ nli:
   device: auto
   batch_size: 8
   max_length: 256
+  entailment_threshold: 0.6
+  contradiction_threshold: 0.2
   # Path to exported ONNX model (for onnxruntime backend)
   onnx_model_path: ""
   # Execution providers used by onnxruntime (order matters)

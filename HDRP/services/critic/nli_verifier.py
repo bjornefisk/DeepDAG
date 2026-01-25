@@ -80,6 +80,7 @@ class NLIVerifier:
 
         # Load backend (lazy initialization on first use)
         self._backend = None
+        self._label_index_map: Optional[Dict[str, int]] = None
         
         # Statistics tracking
         self.cache_hits = 0
@@ -109,6 +110,55 @@ class NLIVerifier:
                 )
             else:
                 raise ValueError(f"Unsupported NLI backend: {self.backend}")
+
+    def _normalize_label(self, label: str) -> str:
+        normalized = label.lower().strip()
+        if "contradiction" in normalized or "contradict" in normalized:
+            return "contradiction"
+        if "entailment" in normalized or "entails" in normalized or "entail" in normalized:
+            return "entailment"
+        if "neutral" in normalized:
+            return "neutral"
+        return normalized
+
+    def _get_label_index_map(self) -> Dict[str, int]:
+        """Resolve label indices for contradiction/neutral/entailment."""
+        if self._label_index_map is not None:
+            return self._label_index_map
+
+        default_map = {"contradiction": 0, "neutral": 1, "entailment": 2}
+        id2label = None
+
+        try:
+            self._ensure_model_loaded()
+            model = getattr(self._backend, "model", None)
+            config = getattr(model, "config", None) if model is not None else None
+            id2label = getattr(config, "id2label", None)
+        except Exception:
+            id2label = None
+
+        if id2label is None:
+            try:
+                from transformers import AutoConfig
+
+                config = AutoConfig.from_pretrained(self.model_name)
+                id2label = getattr(config, "id2label", None)
+            except Exception:
+                id2label = None
+
+        label_map = {}
+        if isinstance(id2label, dict):
+            for idx, label in id2label.items():
+                normalized = self._normalize_label(str(label))
+                if normalized in ("contradiction", "neutral", "entailment"):
+                    label_map[normalized] = int(idx)
+
+        if set(label_map.keys()) != set(default_map.keys()):
+            self._label_index_map = default_map
+            return default_map
+
+        self._label_index_map = label_map
+        return label_map
 
     def _get_tokenizer(self):
         self._ensure_model_loaded()
@@ -157,19 +207,34 @@ class NLIVerifier:
             return float(np.median(scores))
         return float(np.max(scores))
 
-    def _score_pairs(self, pairs: List[Tuple[str, str]]) -> List[float]:
+    def _score_pairs_probabilities(
+        self, pairs: List[Tuple[str, str]]
+    ) -> List[Dict[str, float]]:
         logits = self._backend.predict_logits(pairs)
         logits = np.asarray(logits)
         if logits.ndim == 1:
             logits = np.expand_dims(logits, axis=0)
 
+        label_map = self._get_label_index_map()
         scores = []
         for row in logits:
             exp_logits = np.exp(row - np.max(row))
             probabilities = exp_logits / np.sum(exp_logits)
-            entailment_score = float(np.clip(probabilities[1], 0.0, 1.0))
-            scores.append(entailment_score)
+            contradiction_score = float(np.clip(probabilities[label_map["contradiction"]], 0.0, 1.0))
+            neutral_score = float(np.clip(probabilities[label_map["neutral"]], 0.0, 1.0))
+            entailment_score = float(np.clip(probabilities[label_map["entailment"]], 0.0, 1.0))
+            scores.append(
+                {
+                    "contradiction": contradiction_score,
+                    "neutral": neutral_score,
+                    "entailment": entailment_score,
+                }
+            )
         return scores
+
+    def _score_pairs(self, pairs: List[Tuple[str, str]]) -> List[float]:
+        probabilities = self._score_pairs_probabilities(pairs)
+        return [entry["entailment"] for entry in probabilities]
 
     def _compute_entailment_uncached(self, premise: str, hypothesis: str) -> float:
         self._ensure_model_loaded()
@@ -236,7 +301,8 @@ class NLIVerifier:
             
         Note:
             Cross-encoder outputs logits for [contradiction, neutral, entailment].
-            We convert to softmax probabilities and return the entailment probability.
+            We convert to softmax probabilities and return the entailment probability
+            using model-provided label mapping when available.
         """
         # Check cache first
         cached_score = self._get_cached_prediction(premise, hypothesis)
@@ -249,6 +315,25 @@ class NLIVerifier:
         self._cache_prediction(premise, hypothesis, entailment_score)
         
         return entailment_score
+
+    def compute_relation(self, premise: str, hypothesis: str) -> Dict[str, float]:
+        """Compute full NLI relation probabilities for a pair."""
+        self._ensure_model_loaded()
+        chunks = self._chunk_premise(premise, hypothesis)
+        if len(chunks) == 1:
+            scores = self._score_pairs_probabilities([(premise, hypothesis)])
+            return scores[0]
+
+        pairs = [(chunk, hypothesis) for chunk in chunks]
+        scores = self._score_pairs_probabilities(pairs)
+        entailment = self._aggregate_scores([s["entailment"] for s in scores])
+        contradiction = self._aggregate_scores([s["contradiction"] for s in scores])
+        neutral = self._aggregate_scores([s["neutral"] for s in scores])
+        return {
+            "contradiction": float(contradiction),
+            "neutral": float(neutral),
+            "entailment": float(entailment),
+        }
     
     def compute_entailment_batch(
         self, 
@@ -312,6 +397,43 @@ class NLIVerifier:
                 self._cache_prediction(premise, hypothesis, score)
         
         return scores
+
+    def compute_relation_batch(
+        self,
+        premise_hypothesis_pairs: List[Tuple[str, str]]
+    ) -> List[Dict[str, float]]:
+        """Compute full NLI relation probabilities for multiple pairs in batch."""
+        if not premise_hypothesis_pairs:
+            return []
+
+        self._ensure_model_loaded()
+        results = [None] * len(premise_hypothesis_pairs)
+        simple_pairs = []
+        simple_map = []
+        chunked_map = []
+
+        for idx, (premise, hypothesis) in enumerate(premise_hypothesis_pairs):
+            chunks = self._chunk_premise(premise, hypothesis)
+            if len(chunks) == 1:
+                simple_pairs.append((premise, hypothesis))
+                simple_map.append(idx)
+            else:
+                chunked_map.append(idx)
+
+        if simple_pairs:
+            simple_scores = self._score_pairs_probabilities(simple_pairs)
+            for idx, score in zip(simple_map, simple_scores):
+                results[idx] = score
+                premise, hypothesis = premise_hypothesis_pairs[idx]
+                self._cache_prediction(premise, hypothesis, score["entailment"])
+
+        for idx in chunked_map:
+            premise, hypothesis = premise_hypothesis_pairs[idx]
+            score = self.compute_relation(premise, hypothesis)
+            results[idx] = score
+            self._cache_prediction(premise, hypothesis, score["entailment"])
+
+        return results
     
     def get_cache_stats(self) -> Dict[str, any]:
         """Get cache performance statistics.

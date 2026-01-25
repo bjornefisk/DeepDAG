@@ -63,6 +63,8 @@ class NLIConfig(BaseSettings):
     device: str = Field("auto", env="HDRP_NLI_DEVICE")
     batch_size: int = Field(8, env="HDRP_NLI_BATCH_SIZE")
     max_length: int = Field(256, env="HDRP_NLI_MAX_LENGTH")
+    entailment_threshold: float = Field(0.60, env="HDRP_NLI_ENTAILMENT_THRESHOLD")
+    contradiction_threshold: float = Field(0.20, env="HDRP_NLI_CONTRADICTION_THRESHOLD")
     onnx_model_path: Optional[str] = Field(None, env="HDRP_NLI_ONNX_PATH")
     onnx_providers: List[str] = Field(default_factory=list, env="HDRP_NLI_ONNX_PROVIDERS")
     int8: bool = Field(False, env="HDRP_NLI_INT8")

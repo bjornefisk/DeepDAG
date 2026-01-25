@@ -4,6 +4,7 @@ from HDRP.services.shared.claims import AtomicClaim, CritiqueResult
 from HDRP.services.shared.logger import ResearchLogger
 from HDRP.services.shared.errors import CriticError, report_error
 from HDRP.services.shared.profiling_utils import profile_block, enable_profiling_env
+from HDRP.services.shared.settings import get_settings
 from HDRP.services.critic.nli_verifier import NLIVerifier
 from datetime import datetime
 
@@ -16,7 +17,13 @@ class CriticService:
     
     Optimized with batch verification and tokenization caching.
     """
-    def __init__(self, run_id: Optional[str] = None, use_nli: bool = True, nli_threshold: float = 0.60):
+    def __init__(
+        self,
+        run_id: Optional[str] = None,
+        use_nli: bool = True,
+        nli_threshold: Optional[float] = None,
+        nli_contradiction_threshold: Optional[float] = None,
+    ):
         """Initialize CriticService.
         
         Args:
@@ -32,8 +39,20 @@ class CriticService:
         self._executor = ThreadPoolExecutor(max_workers=4)
         
         # NLI-based verification
+        settings = get_settings()
+        nli_settings = settings.nli
+
         self.use_nli = use_nli
-        self.nli_threshold = nli_threshold
+        self.nli_threshold = (
+            nli_threshold
+            if nli_threshold is not None
+            else getattr(nli_settings, "entailment_threshold", 0.60)
+        )
+        self.nli_contradiction_threshold = (
+            nli_contradiction_threshold
+            if nli_contradiction_threshold is not None
+            else getattr(nli_settings, "contradiction_threshold", 0.20)
+        )
         self._nli_verifier: Optional[NLIVerifier] = None
         if self.use_nli:
             self._nli_verifier = NLIVerifier()
@@ -140,13 +159,23 @@ class CriticService:
                     if not rejection_reason:
                         if self.use_nli and self._nli_verifier:
                             # NLI-based verification
-                            nli_score = self._nli_verifier.compute_entailment(
+                            relation = self._nli_verifier.compute_relation(
                                 premise=claim.support_text,
                                 hypothesis=claim.statement
                             )
-                            
-                            if nli_score < self.nli_threshold:
-                                rejection_reason = f"REJECTED: Low grounding (NLI score: {nli_score:.2f})"
+                            nli_score = relation["entailment"]
+                            contradiction_score = relation["contradiction"]
+
+                            if contradiction_score > self.nli_contradiction_threshold:
+                                rejection_reason = (
+                                    "REJECTED: Source contradicts statement "
+                                    f"(NLI entailment: {nli_score:.2f}, contradiction: {contradiction_score:.2f})"
+                                )
+                            elif nli_score < self.nli_threshold:
+                                rejection_reason = (
+                                    "REJECTED: Low grounding "
+                                    f"(NLI entailment: {nli_score:.2f}, contradiction: {contradiction_score:.2f})"
+                                )
                         else:
                             # Fallback to heuristic word overlap
                             statement_tokens = self._tokenize(lower_statement)
@@ -287,13 +316,20 @@ class CriticService:
                         "source_url": claim.source_url,
                         "source_title": getattr(claim, 'source_title', None)
                     }
-                    # Add NLI score if available
-                    if self.use_nli and "NLI score" in reason:
-                        # Extract NLI score from reason
+                    # Add NLI scores if available
+                    if self.use_nli and "NLI" in reason:
                         import re
-                        nli_match = re.search(r'NLI score: (\d+\.\d+)', reason)
-                        if nli_match:
-                            log_data["nli_score"] = float(nli_match.group(1))
+
+                        entailment_match = re.search(r'NLI entailment: (\d+\.\d+)', reason)
+                        contradiction_match = re.search(r'contradiction: (\d+\.\d+)', reason)
+                        legacy_match = re.search(r'NLI score: (\d+\.\d+)', reason)
+
+                        if entailment_match:
+                            log_data["nli_entailment"] = float(entailment_match.group(1))
+                        if contradiction_match:
+                            log_data["nli_contradiction"] = float(contradiction_match.group(1))
+                        if legacy_match:
+                            log_data["nli_score"] = float(legacy_match.group(1))
                     
                     self.logger.log("claim_rejected", log_data)
                     claim.confidence = 0.0
