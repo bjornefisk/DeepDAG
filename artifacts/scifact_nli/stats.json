@@ -1,0 +1,11 @@
+{
+  "train": {
+    "CONTRADICTION": 341,
+    "ENTAILMENT": 616
+  },
+  "dev": {
+    "ENTAILMENT": 216,
+    "CONTRADICTION": 122
+  },
+  "test": {}
+}

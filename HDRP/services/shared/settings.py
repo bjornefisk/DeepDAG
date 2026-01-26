@@ -61,6 +61,10 @@ class NLIConfig(BaseSettings):
     """NLI inference configuration."""
     backend: Literal["torch", "onnxruntime"] = Field("torch", env="HDRP_NLI_BACKEND")
     device: str = Field("auto", env="HDRP_NLI_DEVICE")
+    model_name: str = Field(
+        "cross-encoder/nli-deberta-v3-base",
+        env="HDRP_NLI_MODEL_NAME",
+    )
     batch_size: int = Field(8, env="HDRP_NLI_BATCH_SIZE")
     max_length: int = Field(256, env="HDRP_NLI_MAX_LENGTH")
     entailment_threshold: float = Field(0.60, env="HDRP_NLI_ENTAILMENT_THRESHOLD")

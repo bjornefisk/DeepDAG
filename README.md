@@ -165,6 +165,17 @@ Set `HDRP_SEARCH_PROVIDER` to automatically use a specific provider:
 python -m HDRP.cli run --query "Your research query"
 ```
 
+## NLI Fine-Tuning (SciFact)
+
+The Critic uses a cross-encoder NLI model for claim verification. You can
+fine-tune it on SciFact and switch models via configuration.
+
+- Prep SciFact JSONL and train a model using the scripts in `HDRP/tools/train/`.
+- Benchmark against the baseline using `HDRP/tools/eval/benchmark_scifact_nli.py`.
+- Switch the model with `HDRP_NLI_MODEL_NAME` (or update `nli.model_name` in config).
+
+See `HDRP/tools/train/README.md` for full instructions.
+
 ## License
 
 Licensed under the Apache License 2.0. See [HDRP/LICENSE](HDRP/LICENSE) for details.

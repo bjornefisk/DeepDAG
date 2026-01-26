@@ -32,7 +32,7 @@ class NLIVerifier:
     
     def __init__(
         self, 
-        model_name: str = "cross-encoder/nli-deberta-v3-base",
+        model_name: Optional[str] = None,
         cache_size: int = 10000,
         device: Optional[str] = None,
         backend: Optional[str] = None,
@@ -58,7 +58,7 @@ class NLIVerifier:
         settings = get_settings()
         nli_settings = settings.nli
 
-        self.model_name = model_name
+        self.model_name = model_name or nli_settings.model_name
         self.cache_size = cache_size
         self._prediction_cache: Dict[str, float] = {}
         

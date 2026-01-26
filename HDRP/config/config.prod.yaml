@@ -26,6 +26,7 @@ services:
 nli:
   backend: torch
   device: auto
+  model_name: cross-encoder/nli-deberta-v3-base
   batch_size: 16
   max_length: 256
   onnx_model_path: ""
