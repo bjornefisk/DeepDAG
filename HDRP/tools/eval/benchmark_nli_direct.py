@@ -23,6 +23,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from HDRP.services.critic.nli_verifier import NLIVerifier
+from HDRP.services.shared.settings import get_settings
 
 
 @dataclass
@@ -47,6 +48,8 @@ class BenchmarkResult:
     f1_score: float
     avg_processing_time_ms: float
     category_breakdown: Dict[str, Dict[str, int]]
+    multi_class_metrics: Dict[str, Dict[str, float]]
+    category_accuracy: Dict[str, Dict[str, float]]
 
 
 def create_adversarial_test_cases() -> List[TestCase]:
@@ -245,7 +248,76 @@ def word_overlap_heuristic(premise: str, hypothesis: str, threshold: float = 0.6
     return overlap_ratio >= threshold
 
 
-def benchmark_method(method: str, test_cases: List[TestCase], nli_threshold: float = 0.60) -> BenchmarkResult:
+def _predict_nli_label(
+    verifier: NLIVerifier,
+    premise: str,
+    hypothesis: str,
+    entailment_threshold: float,
+    contradiction_threshold: float,
+) -> str:
+    relation = verifier.compute_relation(premise, hypothesis)
+    if relation["contradiction"] >= contradiction_threshold:
+        return "CONTRADICTION"
+    if relation["entailment"] >= entailment_threshold:
+        return "ENTAILMENT"
+    return "NO_ENTAILMENT"
+
+
+def _compute_multi_class_metrics(
+    labels: List[str],
+    confusion: Dict[str, Dict[str, int]]
+) -> Dict[str, Dict[str, float]]:
+    per_label = {}
+    precisions = []
+    recalls = []
+    f1s = []
+    correct = 0
+    total = 0
+
+    for true_label in labels:
+        row = confusion[true_label]
+        total += sum(row.values())
+        correct += row.get(true_label, 0)
+
+    for label in labels:
+        tp = confusion[label].get(label, 0)
+        fp = sum(confusion[true_label].get(label, 0) for true_label in labels if true_label != label)
+        fn = sum(confusion[label].get(other_label, 0) for other_label in labels if other_label != label)
+
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+
+        per_label[label] = {
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+        }
+
+        precisions.append(precision)
+        recalls.append(recall)
+        f1s.append(f1)
+
+    macro_precision = sum(precisions) / len(precisions) if precisions else 0.0
+    macro_recall = sum(recalls) / len(recalls) if recalls else 0.0
+    macro_f1 = sum(f1s) / len(f1s) if f1s else 0.0
+    accuracy = correct / total if total > 0 else 0.0
+
+    return {
+        "macro_precision": macro_precision,
+        "macro_recall": macro_recall,
+        "macro_f1": macro_f1,
+        "accuracy": accuracy,
+        "per_label": per_label,
+    }
+
+
+def benchmark_method(
+    method: str,
+    test_cases: List[TestCase],
+    entailment_threshold: float = 0.60,
+    contradiction_threshold: float = 0.20,
+) -> BenchmarkResult:
     """Benchmark a single method."""
     
     if method == "nli":
@@ -257,21 +329,32 @@ def benchmark_method(method: str, test_cases: List[TestCase], nli_threshold: flo
     false_negatives = 0
     
     category_breakdown = {}
+    category_accuracy = {}
+    labels = ["ENTAILMENT", "CONTRADICTION", "NO_ENTAILMENT"]
+    confusion = {label: {pred: 0 for pred in labels} for label in labels}
     
     start_time = time.time()
     
     for test_case in test_cases:
         # Determine prediction
         if method == "nli":
-            score = verifier.compute_entailment(test_case.premise, test_case.hypothesis)
-            predicted_entailment = (score >= nli_threshold)
+            predicted_label = _predict_nli_label(
+                verifier,
+                test_case.premise,
+                test_case.hypothesis,
+                entailment_threshold,
+                contradiction_threshold,
+            )
+            predicted_entailment = (predicted_label == "ENTAILMENT")
         elif method == "heuristic":
             predicted_entailment = word_overlap_heuristic(test_case.premise, test_case.hypothesis)
+            predicted_label = "ENTAILMENT" if predicted_entailment else "NO_ENTAILMENT"
         else:
             raise ValueError(f"Unknown method: {method}")
         
         # Determine ground truth
         should_accept = (test_case.ground_truth == "ENTAILMENT")
+        true_label = test_case.ground_truth
         
         # Update confusion matrix
         if should_accept and predicted_entailment:
@@ -283,7 +366,7 @@ def benchmark_method(method: str, test_cases: List[TestCase], nli_threshold: flo
         elif not should_accept and not predicted_entailment:
             true_negatives += 1
         
-        # Track by category
+        # Track by category (binary entailment)
         category = test_case.category
         if category not in category_breakdown:
             category_breakdown[category] = {"tp": 0, "fp": 0, "tn": 0, "fn": 0}
@@ -296,14 +379,41 @@ def benchmark_method(method: str, test_cases: List[TestCase], nli_threshold: flo
             category_breakdown[category]["fn"] += 1
         else:
             category_breakdown[category]["tn"] += 1
+
+        # Multi-class confusion
+        if true_label not in confusion:
+            confusion[true_label] = {pred: 0 for pred in labels}
+        if predicted_label not in confusion[true_label]:
+            confusion[true_label][predicted_label] = 0
+        confusion[true_label][predicted_label] += 1
+
+        # Multi-class category accuracy
+        if category not in category_accuracy:
+            category_accuracy[category] = {
+                "correct": 0,
+                "total": 0,
+                "accuracy": 0.0,
+                "predictions": {label: 0 for label in labels},
+            }
+        category_accuracy[category]["total"] += 1
+        category_accuracy[category]["predictions"][predicted_label] += 1
+        if predicted_label == true_label:
+            category_accuracy[category]["correct"] += 1
     
     end_time = time.time()
     processing_time_ms = (end_time - start_time) * 1000
     
-    # Calculate metrics
+    # Calculate metrics (binary entailment)
     precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0.0
     recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0.0
     f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+
+    # Finalize category accuracy
+    for category, stats in category_accuracy.items():
+        if stats["total"] > 0:
+            stats["accuracy"] = stats["correct"] / stats["total"]
+
+    multi_class_metrics = _compute_multi_class_metrics(labels, confusion)
     
     return BenchmarkResult(
         method=method,
@@ -315,11 +425,17 @@ def benchmark_method(method: str, test_cases: List[TestCase], nli_threshold: flo
         recall=recall,
         f1_score=f1_score,
         avg_processing_time_ms=processing_time_ms,
-        category_breakdown=category_breakdown
+        category_breakdown=category_breakdown,
+        multi_class_metrics=multi_class_metrics,
+        category_accuracy=category_accuracy,
     )
 
 
-def run_benchmark(output_path: str = None) -> Dict:
+def run_benchmark(
+    output_path: str = None,
+    entailment_threshold: float = None,
+    contradiction_threshold: float = None,
+) -> Dict:
     """Run direct NLI benchmark."""
     
     print("=" * 80)
@@ -343,7 +459,25 @@ def run_benchmark(output_path: str = None) -> Dict:
     
     # Benchmark heuristic
     print("Benchmarking word overlap heuristic...")
-    heuristic_result = benchmark_method("heuristic", test_cases)
+    settings = get_settings()
+    nli_settings = settings.nli
+    entailment_threshold = (
+        nli_settings.entailment_threshold
+        if entailment_threshold is None
+        else entailment_threshold
+    )
+    contradiction_threshold = (
+        nli_settings.contradiction_threshold
+        if contradiction_threshold is None
+        else contradiction_threshold
+    )
+
+    heuristic_result = benchmark_method(
+        "heuristic",
+        test_cases,
+        entailment_threshold=entailment_threshold,
+        contradiction_threshold=contradiction_threshold,
+    )
     print(f"  Precision: {heuristic_result.precision:.2%}, "
           f"Recall: {heuristic_result.recall:.2%}, "
           f"F1: {heuristic_result.f1_score:.2%}, "
@@ -352,11 +486,26 @@ def run_benchmark(output_path: str = None) -> Dict:
     
     # Benchmark NLI
     print("Benchmarking NLI verifier...")
-    nli_result = benchmark_method("nli", test_cases)
+    nli_result = benchmark_method(
+        "nli",
+        test_cases,
+        entailment_threshold=entailment_threshold,
+        contradiction_threshold=contradiction_threshold,
+    )
     print(f"  Precision: {nli_result.precision:.2%}, "
           f"Recall: {nli_result.recall:.2%}, "
           f"F1: {nli_result.f1_score:.2%}, "
           f"Time: {nli_result.avg_processing_time_ms:.1f}ms")
+    print()
+    print("Multi-class (3-way) metrics:")
+    print(f"  Accuracy: {nli_result.multi_class_metrics['accuracy']:.2%}, "
+          f"Macro Precision: {nli_result.multi_class_metrics['macro_precision']:.2%}, "
+          f"Macro Recall: {nli_result.multi_class_metrics['macro_recall']:.2%}, "
+          f"Macro F1: {nli_result.multi_class_metrics['macro_f1']:.2%}")
+    for label, metrics in nli_result.multi_class_metrics["per_label"].items():
+        print(f"  {label:14s} Precision: {metrics['precision']:.2%}, "
+              f"Recall: {metrics['recall']:.2%}, "
+              f"F1: {metrics['f1']:.2%}")
     print()
     
     # Summary
@@ -387,7 +536,15 @@ def run_benchmark(output_path: str = None) -> Dict:
             prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
             rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
             f1 = 2 * (prec * rec) / (prec + rec) if (prec + rec) > 0 else 0.0
-            print(f"    [{method:10s}] Precision: {prec:.2%}, Recall: {rec:.2%}, F1: {f1:.2%}")
+            print(f"    [{method:10s}] Binary Entailment - Precision: {prec:.2%}, Recall: {rec:.2%}, F1: {f1:.2%}")
+
+            accuracy = result.category_accuracy.get(category, {}).get("accuracy", 0.0)
+            prediction_counts = result.category_accuracy.get(category, {}).get("predictions", {})
+            preds = ", ".join(
+                f"{label}:{prediction_counts.get(label, 0)}"
+                for label in ["ENTAILMENT", "CONTRADICTION", "NO_ENTAILMENT"]
+            )
+            print(f"    [{method:10s}] 3-way Accuracy: {accuracy:.2%} (Pred: {preds})")
     
     # Check target
     f1_improvement_pct = (f1_improvement / heuristic_result.f1_score * 100) if heuristic_result.f1_score > 0 else 0
@@ -409,6 +566,10 @@ def run_benchmark(output_path: str = None) -> Dict:
             "f1": f1_improvement,
             "precision": precision_improvement,
             "recall": recall_improvement
+        },
+        "thresholds": {
+            "entailment": entailment_threshold,
+            "contradiction": contradiction_threshold,
         },
         "target_met": target_met
     }
@@ -433,10 +594,26 @@ def main():
         default=None,
         help="Path to save benchmark results JSON"
     )
+    parser.add_argument(
+        "--entailment-threshold",
+        type=float,
+        default=None,
+        help="Entailment threshold for NLI classification"
+    )
+    parser.add_argument(
+        "--contradiction-threshold",
+        type=float,
+        default=None,
+        help="Contradiction threshold for NLI classification"
+    )
     
     args = parser.parse_args()
     
-    run_benchmark(output_path=args.output_report)
+    run_benchmark(
+        output_path=args.output_report,
+        entailment_threshold=args.entailment_threshold,
+        contradiction_threshold=args.contradiction_threshold,
+    )
 
 
 if __name__ == "__main__":
