@@ -1,11 +1,26 @@
 {
   "train": {
-    "CONTRADICTION": 341,
-    "ENTAILMENT": 616
+    "total_examples": 841,
+    "unique_claims": 450,
+    "label_distribution": {
+      "CONTRADICTION": 295,
+      "ENTAILMENT": 546
+    }
   },
   "dev": {
-    "ENTAILMENT": 216,
-    "CONTRADICTION": 122
+    "total_examples": 193,
+    "unique_claims": 103,
+    "label_distribution": {
+      "ENTAILMENT": 123,
+      "CONTRADICTION": 70
+    }
   },
-  "test": {}
+  "test": {
+    "total_examples": 261,
+    "unique_claims": 140,
+    "label_distribution": {
+      "ENTAILMENT": 163,
+      "CONTRADICTION": 98
+    }
+  }
 }
