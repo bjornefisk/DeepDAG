@@ -95,6 +95,10 @@ def main() -> None:
         show_progress_bar=True,
     )
 
+    # Explicitly save the model
+    model.save(str(output_dir))
+    print(f"Model saved to {output_dir}")
+
     label_map_path = output_dir / "label_map.json"
     label_map_path.write_text(json.dumps(LABEL_TO_ID, indent=2), encoding="utf-8")
 
