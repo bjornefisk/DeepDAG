@@ -6,6 +6,7 @@ from HDRP.services.shared.errors import CriticError, report_error
 from HDRP.services.shared.profiling_utils import profile_block, enable_profiling_env
 from HDRP.services.shared.settings import get_settings
 from HDRP.services.critic.nli_verifier import NLIVerifier
+from HDRP.services.critic.nli_http_client import NLIHttpClient
 from datetime import datetime
 
 class CriticService:
@@ -23,6 +24,8 @@ class CriticService:
         use_nli: bool = True,
         nli_threshold: Optional[float] = None,
         nli_contradiction_threshold: Optional[float] = None,
+        nli_client: Optional[NLIHttpClient] = None,
+        nli_variant: Optional[str] = None,
     ):
         """Initialize CriticService.
         
@@ -54,8 +57,9 @@ class CriticService:
             else getattr(nli_settings, "contradiction_threshold", 0.20)
         )
         self._nli_verifier: Optional[NLIVerifier] = None
+        self.nli_variant = nli_variant
         if self.use_nli:
-            self._nli_verifier = NLIVerifier()
+            self._nli_verifier = nli_client or NLIVerifier()
     
     def verify(self, claims: List[AtomicClaim], task: str) -> List[CritiqueResult]:
         """Verify claims with balanced precision/recall using query decomposition logic.
@@ -159,10 +163,17 @@ class CriticService:
                     if not rejection_reason:
                         if self.use_nli and self._nli_verifier:
                             # NLI-based verification
-                            relation = self._nli_verifier.compute_relation(
-                                premise=claim.support_text,
-                                hypothesis=claim.statement
-                            )
+                            if isinstance(self._nli_verifier, NLIHttpClient):
+                                relation = self._nli_verifier.compute_relation(
+                                    premise=claim.support_text,
+                                    hypothesis=claim.statement,
+                                    variant=self.nli_variant,
+                                )
+                            else:
+                                relation = self._nli_verifier.compute_relation(
+                                    premise=claim.support_text,
+                                    hypothesis=claim.statement
+                                )
                             nli_score = relation["entailment"]
                             contradiction_score = relation["contradiction"]
 
