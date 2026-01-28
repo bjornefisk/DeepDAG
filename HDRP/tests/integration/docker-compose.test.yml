@@ -9,7 +9,13 @@ services:
       dockerfile: HDRP/tests/integration/Dockerfile.python
     image: hdrp-test-python:latest
     container_name: hdrp-test-python-base
-    command: echo "Base image for Python services"
+    command: sleep infinity
+    healthcheck:
+      test: ["CMD", "echo", "healthy"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 2s
 
   # Python gRPC Services
   researcher:
