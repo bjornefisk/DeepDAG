@@ -55,12 +55,21 @@ type NodeResult struct {
 }
 
 // NewDAGExecutor creates a DAG executor with the specified worker pool size.
-// If maxWorkers <= 0, uses default from configuration.
+// If maxWorkers <= 0, uses default value of 4.
 func NewDAGExecutor(clients *clients.ServiceClients, maxWorkers int) *DAGExecutor {
-	config := concurrency.LoadConfig()
-
 	if maxWorkers <= 0 {
-		maxWorkers = config.MaxWorkers
+		maxWorkers = 4 // Default value
+	}
+
+	// Create concurrency config with defaults
+	config := &concurrency.Config{
+		MaxWorkers:            maxWorkers,
+		ResearcherRateLimit:   100,
+		CriticRateLimit:       100,
+		SynthesizerRateLimit:  100,
+		LockProvider:          "none",
+		LockTimeout:           30 * time.Second,
+		NodeExecutionTimeout:  5 * time.Minute,
 	}
 
 	// Initialize lock manager

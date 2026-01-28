@@ -4,11 +4,17 @@ version: '3.8'
 # Runs all services in isolated containers for deterministic testing
 
 services:
-  # Python gRPC Services
-  researcher:
+  # Shared base image for Python services - only built once
+  python-base:
     build:
       context: ../../..
       dockerfile: HDRP/tests/integration/Dockerfile.python
+    image: hdrp-test-python:latest
+    container_name: hdrp-test-python-base
+    command: echo "Base image for Python services"
+
+  # Python gRPC Services
+  researcher:
     image: hdrp-test-python:latest
     container_name: hdrp-test-researcher
     command: python3 HDRP/services/researcher/researcher_server.py --port 50052
@@ -19,6 +25,9 @@ services:
       - PYTHONUNBUFFERED=1
     networks:
       - hdrp-test-net
+    depends_on:
+      python-base:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 50052)); s.close()"]
       interval: 5s
@@ -27,9 +36,6 @@ services:
       start_period: 5s
 
   critic:
-    build:
-      context: ../../..
-      dockerfile: HDRP/tests/integration/Dockerfile.python
     image: hdrp-test-python:latest
     container_name: hdrp-test-critic
     command: python3 HDRP/services/critic/critic_server.py --port 50053
@@ -40,6 +46,9 @@ services:
       - PYTHONUNBUFFERED=1
     networks:
       - hdrp-test-net
+    depends_on:
+      python-base:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 50053)); s.close()"]
       interval: 5s
@@ -48,9 +57,6 @@ services:
       start_period: 5s
 
   synthesizer:
-    build:
-      context: ../../..
-      dockerfile: HDRP/tests/integration/Dockerfile.python
     image: hdrp-test-python:latest
     container_name: hdrp-test-synthesizer
     command: python3 HDRP/services/synthesizer/synthesizer_server.py --port 50054
@@ -61,6 +67,9 @@ services:
       - PYTHONUNBUFFERED=1
     networks:
       - hdrp-test-net
+    depends_on:
+      python-base:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 50054)); s.close()"]
       interval: 5s
@@ -69,9 +78,6 @@ services:
       start_period: 5s
 
   principal:
-    build:
-      context: ../../..
-      dockerfile: HDRP/tests/integration/Dockerfile.python
     image: hdrp-test-python:latest
     container_name: hdrp-test-principal
     command: python3 HDRP/services/principal/principal_server.py --port 50051
@@ -82,6 +88,9 @@ services:
       - PYTHONUNBUFFERED=1
     networks:
       - hdrp-test-net
+    depends_on:
+      python-base:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 50051)); s.close()"]
       interval: 5s
@@ -124,9 +133,6 @@ services:
 
   # Test Runner
   test-runner:
-    build:
-      context: ../../..
-      dockerfile: HDRP/tests/integration/Dockerfile.python
     image: hdrp-test-python:latest
     container_name: hdrp-test-runner
     command: pytest HDRP/tests/integration/ -v --timeout=30 --tb=short
@@ -135,6 +141,8 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTEST_CURRENT_TEST=1
     depends_on:
+      python-base:
+        condition: service_started
       researcher:
         condition: service_healthy
       critic:

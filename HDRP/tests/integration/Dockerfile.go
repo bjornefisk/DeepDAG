@@ -3,14 +3,15 @@ FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
-# Copy Go modules
+# Copy Go modules and API proto for module replacement
 COPY HDRP/orchestrator/go.mod HDRP/orchestrator/go.sum ./orchestrator/
+COPY HDRP/api/ ./api/
+
 WORKDIR /app/orchestrator
 RUN go mod download
 
 # Copy source code
 COPY HDRP/orchestrator/ .
-COPY HDRP/api/ ../api/
 
 # Build the orchestrator
 RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server

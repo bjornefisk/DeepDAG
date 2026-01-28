@@ -5,6 +5,7 @@ and Sentry integration with run_id context.
 """
 
 import logging
+import os
 import traceback
 from typing import Optional, Dict, Any, List
 import grpc
@@ -13,6 +14,10 @@ logger = logging.getLogger(__name__)
 
 # Sentry integration (lazy loaded)
 _sentry_initialized = False
+try:  # pragma: no cover - optional dependency
+    import sentry_sdk
+except Exception:  # pragma: no cover - optional dependency
+    sentry_sdk = None
 
 
 def init_sentry(dsn: Optional[str] = None):
@@ -27,32 +32,35 @@ def init_sentry(dsn: Optional[str] = None):
         return
     
     try:
-        import sentry_sdk
+        if sentry_sdk is None:
+            logger.warning("sentry-sdk not installed, error tracking disabled")
+            return
+
         from HDRP.services.shared.settings import get_settings
-        
+
         settings = get_settings()
-        
-        # Get DSN from parameter, settings, or skip if not configured
+
+        # Get DSN from parameter, settings, or environment
         effective_dsn = dsn
         if not effective_dsn and settings.observability.sentry.dsn:
             effective_dsn = settings.observability.sentry.dsn.get_secret_value()
-        
+        if not effective_dsn:
+            effective_dsn = os.getenv("SENTRY_DSN")
+
         if not effective_dsn:
             logger.info("Sentry DSN not configured, error tracking disabled")
             return
-        
+
         sentry_sdk.init(
             dsn=effective_dsn,
             traces_sample_rate=settings.observability.sentry.traces_sample_rate,
             profiles_sample_rate=0.1,
             environment=settings.observability.sentry.environment,
         )
-        
+
         _sentry_initialized = True
         logger.info("Sentry error tracking initialized")
-        
-    except ImportError:
-        logger.warning("sentry-sdk not installed, error tracking disabled")
+
     except Exception as e:
         logger.error(f"Failed to initialize Sentry: {e}")
 
@@ -92,7 +100,27 @@ class HDRPError(Exception):
         }
 
 
-class ServiceError(HDRPError):
+class HDRPServiceError(HDRPError):
+    """Base exception for HDRP services with user-facing defaults."""
+
+    def __init__(
+        self,
+        message: str,
+        run_id: Optional[str] = None,
+        service: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        user_message: Optional[str] = None
+    ):
+        super().__init__(
+            message,
+            run_id=run_id,
+            service=service,
+            metadata=metadata,
+            user_message=user_message or message,
+        )
+
+
+class ServiceError(HDRPServiceError):
     """Base class for service-level errors."""
     pass
 
@@ -172,18 +200,6 @@ capture_exception = report_error
 
 def format_user_error(error: Exception, include_details: bool = False) -> str:
     """Convert exception to user-facing error message (no stack traces)."""
-    if isinstance(error, HDRPError):
-        if error.user_message:
-            return error.user_message
-            
-        service_name = error.service or "service"
-        base_message = f"{service_name.title()} service encountered an error"
-        
-        if include_details:
-            return f"{base_message}: {error.message}"
-        else:
-            return f"{base_message}. Continuing with partial results..."
-    
     # Map common exceptions to friendly messages
     if isinstance(error, ResearcherError):
         return "Unable to complete research. The search service may be unavailable."
@@ -193,6 +209,18 @@ def format_user_error(error: Exception, include_details: bool = False) -> str:
         return "Unable to generate complete report. Partial results available."
     if isinstance(error, PrincipalError):
         return "Unable to decompose query. Using simplified research plan."
+
+    if isinstance(error, HDRPError):
+        if error.user_message:
+            return error.user_message
+
+        service_name = error.service or "service"
+        base_message = f"{service_name.title()} service encountered an error"
+
+        if include_details:
+            return f"{base_message}: {error.message}"
+        else:
+            return f"{base_message}. Continuing with partial results..."
     
     if isinstance(error, ValueError):
         return f"Invalid input: {str(error)}"
@@ -237,7 +265,7 @@ def handle_rpc_error(
 ):
     """Handle RPC error by setting gRPC status and capturing in Sentry."""
     logger.error(f"RPC error in {service}: {exc}", exc_info=True)
-    report_error(exc, run_id=run_id, service=service, extra_context=additional_context)
+    capture_exception(exc, run_id=run_id, service=service, extra_context=additional_context)
     
     status_code = map_to_grpc_status(exc)
     user_message = format_user_error(exc)
