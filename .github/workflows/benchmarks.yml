@@ -1,0 +1,48 @@
+name: Benchmarks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  performance-benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run benchmark (report-only)
+        continue-on-error: true
+        env:
+          HDRP_SEARCH_PROVIDER: simulated
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p artifacts/benchmark
+          python HDRP/benchmark.py \
+            --queries 5 \
+            --provider simulated \
+            --output artifacts/benchmark/benchmark.json
+
+      - name: Upload benchmark artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: artifacts/benchmark/benchmark.json
+          if-no-files-found: warn
