@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Docker Compose configuration for HDRP integration testing
 # Runs all services in isolated containers for deterministic testing
 
