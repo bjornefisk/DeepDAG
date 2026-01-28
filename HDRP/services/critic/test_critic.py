@@ -142,6 +142,31 @@ class TestCriticService(unittest.TestCase):
         self.assertFalse(results[0].is_valid)
         self.assertIn("REJECTED", results[0].reason)
 
+    def test_verify_uses_http_client_variant(self):
+        claim = AtomicClaim(
+            statement="Quantum computing uses qubits for calculations.",
+            support_text="Quantum computing uses qubits for calculations.",
+            source_url="https://example.com/sky",
+            confidence=1.0,
+            extracted_at=self.test_timestamp,
+        )
+        from HDRP.services.critic.nli_http_client import NLIHttpClient
+
+        http_client = NLIHttpClient(base_url="http://nli.example")
+        http_client.compute_relation = mock.MagicMock(
+            return_value={"entailment": 0.95, "contradiction": 0.01, "neutral": 0.04}
+        )
+
+        critic = CriticService(nli_client=http_client, nli_variant="exp")
+        results = critic.verify([claim], task="explain quantum computing")
+
+        http_client.compute_relation.assert_called_once_with(
+            premise=claim.support_text,
+            hypothesis=claim.statement,
+            variant="exp",
+        )
+        self.assertTrue(results[0].is_valid)
+
 
 class TestCriticTwoPassVerification(unittest.TestCase):
     """Tests for two-pass verification logic."""

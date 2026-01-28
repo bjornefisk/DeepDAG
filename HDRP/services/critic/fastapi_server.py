@@ -10,7 +10,13 @@ from typing import Dict
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
-from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import (
+    Counter,
+    Histogram,
+    generate_latest,
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+)
 
 from HDRP.services.critic.nli_verifier import NLIVerifier
 
@@ -19,15 +25,18 @@ logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="HDRP NLI Service", version="1.0.0")
 
+METRICS_REGISTRY = CollectorRegistry()
 REQUEST_COUNT = Counter(
     "hdrp_nli_http_requests_total",
     "Total NLI HTTP requests",
     ["endpoint", "status", "variant"],
+    registry=METRICS_REGISTRY,
 )
 REQUEST_LATENCY = Histogram(
     "hdrp_nli_http_latency_seconds",
     "NLI HTTP request latency in seconds",
     ["endpoint", "variant"],
+    registry=METRICS_REGISTRY,
 )
 
 
@@ -97,7 +106,9 @@ def health() -> Dict[str, object]:
 
 @app.get("/metrics")
 def metrics() -> Response:
-    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    return Response(
+        generate_latest(METRICS_REGISTRY), media_type=CONTENT_TYPE_LATEST
+    )
 
 
 @app.post("/relation", response_model=RelationResponse)
