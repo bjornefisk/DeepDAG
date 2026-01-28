@@ -49,6 +49,33 @@ HDRP/
 └── logs/               # Structured execution traces
 ```
 
+## NLI Model Serving
+
+The Critic service can offload NLI scoring to a FastAPI server that preloads
+models once and exposes Prometheus metrics.
+
+### Start the NLI server
+
+```bash
+python -m HDRP.services.critic.fastapi_server
+```
+
+### Configure variants and routing
+
+- `HDRP_NLI_HTTP_URL` (default: `http://localhost:8000`) controls where the Critic gRPC service sends NLI requests.
+- `HDRP_NLI_VARIANTS` defines model variants as `name=model` pairs (for example: `control=cross-encoder/nli-deberta-v3-base,exp=microsoft/deberta-v3-base`).
+- `HDRP_NLI_VARIANT_DEFAULT` selects the default variant when no header is provided (default: first entry in `HDRP_NLI_VARIANTS`).
+- `HDRP_NLI_MODEL_NAME` sets the default model when `HDRP_NLI_VARIANTS` is unset.
+
+### A/B selection
+
+- HTTP callers can pass `X-Model-Variant` to route to a specific variant.
+- gRPC callers can pass metadata `x-model-variant`, which is forwarded to the NLI server.
+
+### Metrics
+
+- `GET /metrics` exposes Prometheus metrics for the NLI server.
+
 ## CLI Usage
 
 ### Installation
