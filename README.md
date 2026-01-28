@@ -90,6 +90,33 @@ pip install -r requirements.txt
 pip install -r HDRP/services/requirements.txt
 ```
 
+## Testing and CI
+
+### Local tests
+
+- **Unit tests** (skip integration):
+
+```bash
+pytest HDRP/tests HDRP/services HDRP/tools --ignore HDRP/tests/integration -v --timeout=30 --tb=short
+```
+
+- **Integration tests** (Docker Compose):
+
+```bash
+docker compose -f HDRP/tests/integration/docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test-runner
+```
+
+- **Performance benchmark** (report-only by default):
+
+```bash
+python HDRP/benchmark.py --queries 5 --provider simulated --output artifacts/benchmark/benchmark.json
+```
+
+### CI workflows
+
+- `ci.yml` runs unit tests and Docker-based integration tests.
+- `benchmarks.yml` runs a report-only benchmark and uploads `benchmark-results` as a build artifact.
+
 ### Running the HDRP CLI
 
 
