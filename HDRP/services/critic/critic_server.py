@@ -21,6 +21,7 @@ if grpc_gen_path not in sys.path:
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2_grpc
 from HDRP.services.critic.service import CriticService
+from HDRP.services.critic.nli_http_client import NLIHttpClient
 from HDRP.services.shared.claims import AtomicClaim
 from HDRP.services.shared.telemetry import init_telemetry, trace_rpc, add_span_attributes
 
@@ -30,6 +31,9 @@ logger = logging.getLogger(__name__)
 
 class CriticServicer(hdrp_services_pb2_grpc.CriticServiceServicer):
     """Implements CriticService gRPC interface."""
+
+    def __init__(self) -> None:
+        self._nli_client = NLIHttpClient()
     
     @trace_rpc("Verify")
     def Verify(self, request, context):
@@ -93,8 +97,15 @@ class CriticServicer(hdrp_services_pb2_grpc.CriticServiceServicer):
                 )
                 claims.append(claim)
             
+            metadata = dict(context.invocation_metadata())
+            nli_variant = metadata.get("x-model-variant")
+
             # Create critic service instance
-            critic = CriticService(run_id=run_id)
+            critic = CriticService(
+                run_id=run_id,
+                nli_client=self._nli_client,
+                nli_variant=nli_variant,
+            )
             
             # Verify claims with error handling
             critique_results = critic.verify(claims, task=task)

@@ -140,6 +140,14 @@ func Load(configPath string) (*Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
+	// Explicitly bind environment variables for nested config fields
+	// This is needed because AutomaticEnv only works for keys Viper already knows about
+	v.BindEnv("services.principal.address", "HDRP_SERVICES_PRINCIPAL_ADDRESS")
+	v.BindEnv("services.researcher.address", "HDRP_SERVICES_RESEARCHER_ADDRESS")
+	v.BindEnv("services.critic.address", "HDRP_SERVICES_CRITIC_ADDRESS")
+	v.BindEnv("services.synthesizer.address", "HDRP_SERVICES_SYNTHESIZER_ADDRESS")
+	v.BindEnv("concurrency.max_workers", "HDRP_CONCURRENCY_MAX_WORKERS")
+
 	// Unmarshal into Config struct
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {

@@ -21,6 +21,8 @@ dependencies = [
     "numpy>=1.24.0",
     "datasets",
     "huggingface_hub",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
 ]
 
 [project.optional-dependencies]
