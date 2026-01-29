@@ -1,0 +1,56 @@
+{
+  "bundle_info": {
+    "run_id": "f2a2178f-fbcd-4334-9abc-74a5f4b1ef50",
+    "generated_at": "2026-01-16T20:18:51.563028Z",
+    "query": "quantum computing impact",
+    "report_title": "HDRP Research Report: quantum computing impact"
+  },
+  "statistics": {
+    "total_claims": 5,
+    "verified_claims": 4,
+    "rejected_claims": 1,
+    "unique_sources": 5
+  },
+  "sources": [
+    {
+      "url": "https://www.nature.com/articles/s41586-023-0001",
+      "title": "Quantum Computing Impact on Cryptography - Nature",
+      "rank": 1,
+      "claims": 1
+    },
+    {
+      "url": "https://csrc.nist.gov/projects/post-quantum-cryptography",
+      "title": "NIST Post-Quantum Cryptography Standardization",
+      "rank": 2,
+      "claims": 1
+    },
+    {
+      "url": "https://www.nature.com/articles/another-one",
+      "title": "Another Nature Article on Quantum",
+      "rank": 3,
+      "claims": 1
+    },
+    {
+      "url": "https://example.com/search?q=quantum computing impact&id=0",
+      "title": "Result 1 for 'quantum computing impact'",
+      "rank": 4,
+      "claims": 1
+    },
+    {
+      "url": "https://test.org/search?q=quantum computing impact&id=1",
+      "title": "Result 2 for 'quantum computing impact'",
+      "rank": 5,
+      "claims": 1
+    }
+  ],
+  "provenance": {
+    "system": "HDRP",
+    "version": "1.0.0",
+    "pipeline": [
+      "Researcher",
+      "Critic",
+      "Synthesizer"
+    ],
+    "verification_enabled": true
+  }
+}

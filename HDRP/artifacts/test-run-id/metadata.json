@@ -1,0 +1,16 @@
+{
+  "bundle_info": {
+    "run_id": "test-run-id",
+    "generated_at": "2026-01-26T17:13:21.280262Z",
+    "query": "test query",
+    "report_title": "HDRP Research Report: test query"
+  },
+  "statistics": {
+    "total_claims": 1,
+    "verified_claims": 1,
+    "rejected_claims": 0,
+    "unique_sources": 1
+  },
+  "sources": [
+    {
+      "url": 

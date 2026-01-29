@@ -136,15 +136,26 @@ logs/
 HDRP/logs/*
 !HDRP/logs/.gitkeep
 
-# HDRP Artifacts & Results
-HDRP/artifacts/*
-!HDRP/artifacts/.gitkeep
-!HDRP/artifacts/README.md
-results.json
+# Large model files (use Git LFS for these)
+*.safetensors
+*.bin
+*.ckpt
+*.pth
+*.pt
 
-# Databases & Persistence
-data/
+# Training artifacts & checkpoints (local)
 checkpoints/
+HDRP/tools/train/checkpoints/
+*.weights
+
+# Temporary outputs
+results.json
+temp/
+tmp/
+
+# Data directories (local only)
+data/
+datasets/
 
 # Go Orchestrator Binaries
 HDRP/orchestrator/server
