@@ -113,10 +113,11 @@ services:
     ports:
       - "50055:50055"
     environment:
-      - RESEARCHER_ADDRESS=researcher:50052
-      - CRITIC_ADDRESS=critic:50053
-      - SYNTHESIZER_ADDRESS=synthesizer:50054
-      - PRINCIPAL_ADDRESS=principal:50051
+      - HDRP_SERVICES_RESEARCHER_ADDRESS=researcher:50052
+      - HDRP_SERVICES_CRITIC_ADDRESS=critic:50053
+      - HDRP_SERVICES_SYNTHESIZER_ADDRESS=synthesizer:50054
+      - HDRP_SERVICES_PRINCIPAL_ADDRESS=principal:50051
+      - HDRP_CONCURRENCY_MAX_WORKERS=4
     depends_on:
       researcher:
         condition: service_healthy

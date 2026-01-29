@@ -27,8 +27,11 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /app/orchestrator/server /app/orchestrator/server
 
+# Copy config files
+COPY HDRP/config/ /app/config/
+
 # Expose gRPC port
 EXPOSE 50055
 
 # Run the server
-CMD ["/app/orchestrator/server", "-port", "50055"]
+CMD ["/app/orchestrator/server", "-port", "50055", "-config", "/app/config/config.yaml"]
