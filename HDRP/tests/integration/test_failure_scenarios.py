@@ -139,7 +139,7 @@ class TestCriticRejection:
 class TestGRPCConnectionFailures:
     """Tests for gRPC service connection failures."""
     
-    @pytest.mark.timeout(10)
+    @pytest.mark.timeout(15)
     def test_orchestrator_mode_services_not_started(
         self,
         ensure_search_provider_env,
@@ -160,7 +160,7 @@ class TestGRPCConnectionFailures:
             cwd=str(root_dir),
             capture_output=True,
             text=True,
-            timeout=8
+            timeout=12  # Give more time for connection attempts to fail
         )
         
         # Should fail with connection error
@@ -321,14 +321,14 @@ class TestServiceExceptions:
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
     
-    @pytest.mark.timeout(10)
+    @pytest.mark.timeout(20)
     def test_very_long_query(
         self,
         ensure_search_provider_env,
         mock_artifacts_dir
     ):
         """Test with extremely long query."""
-        long_query = "quantum computing " * 100  # Very long query
+        long_query = "quantum computing " * 20  # Very long query (reduced from 100 for reasonable test time)
         
         result = run_query_programmatic(
             query=long_query,

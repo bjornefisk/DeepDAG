@@ -19,6 +19,10 @@ pandas>=2.0.0
 rich>=13.0.0
 typer>=0.9.0
 
+# NLI and ML dependencies
+sentence-transformers>=2.2.0
+torch>=2.0.0
+
 # Profiling and performance
 snakeviz>=2.2.0
 aiohttp>=3.9.0

@@ -76,8 +76,8 @@ class ResearcherService:
                         "error": str(e),
                         "type": type(e).__name__
                     })
-                    # Return empty claims instead of raising - enables partial results
-                    return []
+                    # Raise the error to signal pipeline failure
+                    raise error
             except Exception as e:
                 # Unexpected error - wrap and report
                 error = ResearcherError(
@@ -96,8 +96,8 @@ class ResearcherService:
                     "error": str(e),
                     "type": type(e).__name__
                 })
-                # Return empty claims instead of raising
-                return []
+                # Raise the error to signal pipeline failure
+                raise error
 
         if not search_response.results:
             self.logger.log("research_failed", {
