@@ -147,6 +147,7 @@ HDRP/logs/*
 checkpoints/
 HDRP/tools/train/checkpoints/
 *.weights
+HDRP/artifacts
 
 # Temporary outputs
 results.json
