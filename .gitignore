@@ -173,3 +173,5 @@ venv/
 *.swp
 *.swo
 *~
+
+HDRP/artifacts
