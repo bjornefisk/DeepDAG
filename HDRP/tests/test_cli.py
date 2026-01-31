@@ -1,7 +1,7 @@
 """
 Unit tests for HDRP CLI module.
 
-Tests _build_search_provider, _run_pipeline, and run_query_programmatic functions.
+Tests _build_search_provider, execute_pipeline, and run_query_programmatic functions.
 """
 
 import os
@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch, Mock
 
 from HDRP.cli import (
     _build_search_provider,
-    _run_pipeline,
+    execute_pipeline,
     run_query_programmatic,
 )
 from HDRP.tools.search.base import SearchError
@@ -58,9 +58,15 @@ class TestBuildSearchProvider(unittest.TestCase):
 
     @patch.dict(os.environ, {"GOOGLE_API_KEY": "env-api-key"})
     @patch('HDRP.cli.SearchFactory')
-    def test_google_provider_uses_env_key_when_none_provided(self, mock_factory):
-        """Verify Google provider falls back to env key."""
+    @patch('HDRP.services.shared.settings.get_settings')
+    def test_google_provider_uses_env_key_when_none_provided(self, mock_get_settings, mock_factory):
+        """Verify Google provider uses key from settings when none provided."""
         mock_factory.get_provider.return_value = MagicMock()
+        
+        # Mock settings to return the key
+        mock_settings = MagicMock()
+        mock_settings.search.google.api_key.get_secret_value.return_value = "env-api-key"
+        mock_get_settings.return_value = mock_settings
         
         result = _build_search_provider("google", None)
         
@@ -96,7 +102,7 @@ class TestBuildSearchProvider(unittest.TestCase):
 
 
 class TestRunPipeline(unittest.TestCase):
-    """Tests for _run_pipeline function."""
+    """Tests for execute_pipeline function."""
 
     @patch('HDRP.cli._build_search_provider')
     @patch('HDRP.cli.ResearchLogger')
@@ -126,7 +132,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_synth_instance.synthesize.return_value = "Test report"
         mock_synth.return_value = mock_synth_instance
         
-        result = _run_pipeline(
+        result = execute_pipeline(
             query="test query",
             provider="simulated",
             api_key=None,
@@ -146,7 +152,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_logger_instance.run_id = "test-run-id"
         mock_logger.return_value = mock_logger_instance
         
-        result = _run_pipeline(
+        result = execute_pipeline(
             query="test query",
             provider="google",
             api_key=None,
@@ -166,7 +172,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_logger_instance.run_id = "test-run-id"
         mock_logger.return_value = mock_logger_instance
         
-        result = _run_pipeline(
+        result = execute_pipeline(
             query="test query",
             provider="google",
             api_key=None,
@@ -193,7 +199,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_researcher_instance.research.return_value = []  # No claims
         mock_researcher.return_value = mock_researcher_instance
         
-        result = _run_pipeline(
+        result = execute_pipeline(
             query="test query",
             provider="simulated",
             api_key=None,
@@ -220,7 +226,7 @@ class TestRunPipeline(unittest.TestCase):
         mock_researcher_instance.research.side_effect = Exception("Research failed")
         mock_researcher.return_value = mock_researcher_instance
         
-        result = _run_pipeline(
+        result = execute_pipeline(
             query="test query",
             provider="simulated",
             api_key=None,

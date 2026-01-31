@@ -152,3 +152,31 @@ def mock_artifacts_dir(tmp_path, monkeypatch) -> Path:
     monkeypatch.setattr(cli_module, "ARTIFACTS_DIR", artifacts_dir)
     
     return artifacts_dir
+@pytest.fixture(autouse=True)
+def mock_nli_verifier(monkeypatch):
+    """Mock NLIVerifier to avoid loading heavy models during tests."""
+    from HDRP.services.critic.nli_verifier import NLIVerifier
+    
+    mock_verifier = MagicMock()
+    # Default behavior: return 0.8 entailment, 0.1 contradiction
+    mock_verifier.compute_relation.return_value = {
+        "entailment": 0.8,
+        "contradiction": 0.1,
+        "neutral": 0.1
+    }
+    mock_verifier.compute_entailment.return_value = 0.8
+    mock_verifier.compute_entailment_batch.side_effect = lambda pairs: [0.8] * len(pairs)
+    mock_verifier.compute_relation_batch.side_effect = lambda pairs: [{
+        "entailment": 0.8,
+        "contradiction": 0.1,
+        "neutral": 0.1
+    }] * len(pairs)
+    
+    # We need to mock the class itself to return our mock instance
+    monkeypatch.setattr("HDRP.services.critic.service.NLIVerifier", lambda: mock_verifier)
+    monkeypatch.setattr("HDRP.services.critic.nli_verifier.NLIVerifier", lambda: mock_verifier)
+    
+    return mock_verifier
+
+
+from unittest.mock import MagicMock
