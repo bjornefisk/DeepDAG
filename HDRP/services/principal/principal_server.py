@@ -5,19 +5,12 @@ Decomposes complex queries into DAG structures with atomic research tasks.
 """
 
 import grpc
-from concurrent import futures
 import logging
 from typing import Optional
-import sys
-import os
 
-# Add project root and gRPC gen path to sys.path
-root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
-grpc_gen_path = os.path.join(root_path, "HDRP/api/gen/python/HDRP/api")
-if root_path not in sys.path:
-    sys.path.insert(0, root_path)
-if grpc_gen_path not in sys.path:
-    sys.path.insert(0, grpc_gen_path)
+# Setup paths before imports
+from HDRP.services.shared.grpc_base import setup_grpc_paths, run_server_main
+setup_grpc_paths()
 
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
 from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2_grpc
@@ -102,31 +95,11 @@ class PrincipalServicer(hdrp_services_pb2_grpc.PrincipalServiceServicer):
             return hdrp_services_pb2.DecompositionResponse()
 
 
-def serve(port: int = 50051):
-    """Starts the Principal gRPC server."""
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    hdrp_services_pb2_grpc.add_PrincipalServiceServicer_to_server(
-        PrincipalServicer(), server
-    )
-    
-    address = f'[::]:{port}'
-    server.add_insecure_port(address)
-    server.start()
-    
-    logger.info(f"Principal Service started on {address}")
-    
-    try:
-        server.wait_for_termination()
-    except KeyboardInterrupt:
-        logger.info("Shutting down Principal Service...")
-        server.stop(0)
-
-
 if __name__ == '__main__':
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='Principal Service gRPC Server')
-    parser.add_argument('--port', type=int, default=50051, help='Server port')
-    args = parser.parse_args()
-    
-    serve(args.port)
+    run_server_main(
+        service_name="principal",
+        default_port=50051,
+        servicer_factory=PrincipalServicer,
+        add_to_server_fn=hdrp_services_pb2_grpc.add_PrincipalServiceServicer_to_server,
+        default_metrics_port=None  # Principal doesn't use telemetry by default
+    )
