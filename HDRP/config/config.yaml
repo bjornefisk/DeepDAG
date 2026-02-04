@@ -91,9 +91,9 @@ storage:
   database:
     path: ./hdrp.db
   logs:
-    directory: ./logs
+    directory: HDRP/logs
   artifacts:
-    directory: ./artifacts
+    directory: HDRP/artifacts
 
 # Observability
 observability:

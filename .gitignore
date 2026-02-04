@@ -131,7 +131,6 @@ dmypy.json
 Thumbs.db
 
 # Logs
-logs/
 *.jsonl
 HDRP/logs/*
 !HDRP/logs/.gitkeep
@@ -147,7 +146,8 @@ HDRP/logs/*
 checkpoints/
 HDRP/tools/train/checkpoints/
 *.weights
-HDRP/artifacts
+HDRP/artifacts/*
+!HDRP/artifacts/.gitkeep
 
 # Temporary outputs
 results.json
