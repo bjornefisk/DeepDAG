@@ -1,0 +1,56 @@
+{
+  "bundle_info": {
+    "run_id": "cca71d57-fc87-4d88-8de3-d6bfd69c8453",
+    "generated_at": "2026-02-04T22:35:15.362008Z",
+    "query": "test",
+    "report_title": "HDRP Research Report: test"
+  },
+  "statistics": {
+    "total_claims": 5,
+    "verified_claims": 0,
+    "rejected_claims": 5,
+    "unique_sources": 5
+  },
+  "sources": [
+    {
+      "url": "https://example.com/search?q=test&id=0",
+      "title": "Result 1 for 'test'",
+      "rank": 1,
+      "claims": 1
+    },
+    {
+      "url": "https://test.org/search?q=test&id=1",
+      "title": "Result 2 for 'test'",
+      "rank": 2,
+      "claims": 1
+    },
+    {
+      "url": "https://sample.net/search?q=test&id=2",
+      "title": "Result 3 for 'test'",
+      "rank": 3,
+      "claims": 1
+    },
+    {
+      "url": "https://benchmark.io/search?q=test&id=3",
+      "title": "Result 4 for 'test'",
+      "rank": 4,
+      "claims": 1
+    },
+    {
+      "url": "https://mock.co/search?q=test&id=4",
+      "title": "Result 5 for 'test'",
+      "rank": 5,
+      "claims": 1
+    }
+  ],
+  "provenance": {
+    "system": "HDRP",
+    "version": "1.0.0",
+    "pipeline": [
+      "Researcher",
+      "Critic",
+      "Synthesizer"
+    ],
+    "verification_enabled": true
+  }
+}

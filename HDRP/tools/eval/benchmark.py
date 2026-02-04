@@ -1,74 +1,12 @@
 import argparse
-import os
 import sys
-from typing import Optional
 
 from HDRP.tools.eval.react_agent import ReActAgent
-from HDRP.tools.search import SearchFactory, SearchProvider
+from HDRP.tools.search import SearchProvider
 from HDRP.tools.search.base import SearchError
 from HDRP.tools.search.api_key_validator import APIKeyError
+from HDRP.services.shared.pipeline_runner import build_search_provider
 
-
-def _build_search_provider(explicit_provider: Optional[str]) -> SearchProvider:
-    """Select and configure a SearchProvider based on CLI flags and env.
-
-    Precedence:
-        1. CLI flag --search-provider
-        2. HDRP_SEARCH_PROVIDER environment variable
-        3. Hard-coded default of \"simulated\"
-    """
-    if explicit_provider is not None:
-        provider_type = explicit_provider.lower()
-    else:
-        provider_type = os.getenv("HDRP_SEARCH_PROVIDER", "simulated").lower()
-
-    if provider_type == "tavily":
-        api_key = os.getenv("TAVILY_API_KEY")
-        search_depth = os.getenv("TAVILY_SEARCH_DEPTH", "basic")
-        topic = os.getenv("TAVILY_TOPIC", "general")
-
-        timeout_env = os.getenv("TAVILY_TIMEOUT_SECONDS", "")
-        max_results_env = os.getenv("TAVILY_MAX_RESULTS", "")
-
-        try:
-            timeout_seconds = float(timeout_env) if timeout_env else 8.0
-        except ValueError:
-            timeout_seconds = 8.0
-
-        try:
-            default_max_results = int(max_results_env) if max_results_env else None
-        except ValueError:
-            default_max_results = None
-
-        provider = SearchFactory.get_provider(
-            "tavily",
-            api_key=api_key,
-            search_depth=search_depth,
-            topic=topic,
-            timeout_seconds=timeout_seconds,
-            default_max_results=default_max_results,
-        )
-
-        # If Tavily is misconfigured, fall back to the simulated provider while
-        # emitting a human-readable warning.
-        try:
-            if not provider.health_check():
-                print(
-                    "[benchmark] Tavily is misconfigured (missing or invalid API key); "
-                    "falling back to simulated provider."
-                )
-                return SearchFactory.get_provider("simulated")
-        except Exception:
-            print(
-                "[benchmark] Tavily health check failed; falling back to simulated "
-                "provider."
-            )
-            return SearchFactory.get_provider("simulated")
-
-        return provider
-
-    # Default: deterministic local provider.
-    return SearchFactory.get_provider("simulated")
 
 
 def main() -> None:
@@ -105,7 +43,7 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        provider = _build_search_provider(args.search_provider)
+        provider = build_search_provider(args.search_provider)
     except (SearchError, APIKeyError) as e:
         print(f"\n[ERROR] Failed to initialize search provider:\n", file=sys.stderr)
         print(str(e), file=sys.stderr)

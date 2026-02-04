@@ -17,7 +17,7 @@ root_dir = Path(__file__).resolve().parent.parent
 if str(root_dir) not in sys.path:
     sys.path.insert(0, str(root_dir))
 
-from HDRP.orchestrated_runner import run_orchestrated_programmatic
+from HDRP.services.shared.pipeline_runner import PipelineRunner, build_search_provider
 
 
 # Test queries of varying complexity
@@ -67,12 +67,15 @@ def run_benchmark(
         start_time = time.time()
         
         try:
-            result = run_orchestrated_programmatic(
-                query=query,
-                provider=provider,
-                api_key=api_key,
+            # Build search provider once
+            search_provider = build_search_provider(provider, api_key)
+            
+            # Create runner
+            runner = PipelineRunner(
+                search_provider=search_provider,
                 verbose=False,
             )
+            result = runner.execute(query=query)
             
             elapsed = time.time() - start_time
             latencies.append(elapsed)

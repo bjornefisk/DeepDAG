@@ -23,12 +23,12 @@ from HDRP.tools.eval.metrics import (
     ComparisonResult,
 )
 from HDRP.tools.eval.results_formatter import ResultsFormatter
-from HDRP.tools.search.factory import SearchFactory
 from HDRP.tools.search.base import SearchProvider, SearchError
 from HDRP.tools.search.api_key_validator import APIKeyError
 from HDRP.services.researcher.service import ResearcherService
 from HDRP.services.critic.service import CriticService
 from HDRP.services.shared.logger import ResearchLogger
+from HDRP.services.shared.pipeline_runner import build_search_provider
 
 
 class ComparisonRunner:
@@ -163,27 +163,7 @@ class ComparisonRunner:
         return metrics
 
 
-def _build_search_provider(
-    provider_type: str,
-    api_key: Optional[str] = None,
-    cx: Optional[str] = None,
-) -> SearchProvider:
-    """Build search provider based on type."""
-    if provider_type == "tavily":
-        if api_key:
-            return SearchFactory.get_provider("tavily", api_key=api_key)
-        else:
-            # Will use TAVILY_API_KEY from env
-            return SearchFactory.from_env(default_provider="tavily")
-    elif provider_type == "simulated":
-        return SearchFactory.get_provider("simulated")
-    elif provider_type == "google":
-        provider_kwargs = {}
-        if cx:
-            provider_kwargs["cx"] = cx
-        return SearchFactory.get_provider("google", api_key=api_key, **provider_kwargs)
-    else:
-        raise ValueError(f"Unknown provider type: {provider_type}")
+
 
 
 def main() -> int:
@@ -268,7 +248,7 @@ Examples:
     
     # Build search provider
     try:
-        search_provider = _build_search_provider(args.provider, args.api_key, args.cx)
+        search_provider = build_search_provider(args.provider, args.api_key, args.cx)
     except (SearchError, APIKeyError) as e:
         console.print(f"[bold red]Configuration Error:[/bold red]\n")
         console.print(str(e))
