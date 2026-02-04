@@ -220,16 +220,15 @@ class QueryExecutor:
         cancel_flag: threading.Event,
     ) -> Dict[str, Any]:
         """Execute query using Go orchestrator."""
-        from HDRP.orchestrated_runner import run_orchestrated_programmatic
+        from HDRP.services.shared.pipeline_runner import OrchestratedPipelineRunner
         
         self._update_progress(run_id, current_stage="Starting orchestrator services...", progress_percent=5.0)
         
         if cancel_flag.is_set():
             return {"success": False, "error": "Cancelled"}
         
-        # Execute through orchestrator
-        result = run_orchestrated_programmatic(
-            query=query,
+        # Create orchestrated runner with progress callback
+        runner = OrchestratedPipelineRunner(
             provider=provider,
             api_key=api_key,
             verbose=verbose,
@@ -238,6 +237,9 @@ class QueryExecutor:
                 run_id, current_stage=stage, progress_percent=percent
             ) if not cancel_flag.is_set() else None,
         )
+        
+        # Execute through orchestrator
+        result = runner.execute(query=query)
         
         return result
     
