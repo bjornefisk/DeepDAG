@@ -25,13 +25,13 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from HDRP.tools.search.factory import SearchFactory
 from HDRP.tools.search.base import SearchError
 from HDRP.tools.search.api_key_validator import APIKeyError
-from HDRP.services.researcher.service import ResearcherService
-from HDRP.services.critic.service import CriticService
-from HDRP.services.synthesizer.service import SynthesizerService
-from HDRP.services.shared.logger import ResearchLogger
+from HDRP.services.shared.pipeline_runner import (
+    build_search_provider,
+    PipelineRunner,
+    OrchestratedPipelineRunner,
+)
 
 
 console = Console()
@@ -107,38 +107,7 @@ def _save_report_artifacts(run_id: str, query: str, report: str, claims: list, c
         json.dump(metadata, f, indent=2)
 
 
-def _build_search_provider(
-    provider: str,
-    api_key: Optional[str],
-) -> object:
-    """
-    Construct a search provider using the existing SearchFactory.
-
-    - When provider == "google", prefer explicit api_key if given,
-      otherwise fall back to GOOGLE_API_KEY env var.
-    - When provider == "simulated", ignore api_key.
-    - When provider is omitted, delegate to SearchFactory.from_env().
-    """
-    provider = (provider or "").strip().lower()
-
-    if not provider:
-        # Let factory decide based on HDRP_SEARCH_PROVIDER and friends.
-        return SearchFactory.from_env()
-
-    if provider == "google":
-        # Explicit key wins; otherwise rely on settings
-        effective_key = api_key
-        if not effective_key:
-            from HDRP.services.shared.settings import get_settings
-            settings = get_settings()
-            if settings.search.google.api_key:
-                effective_key = settings.search.google.api_key.get_secret_value()
-        return SearchFactory.get_provider("google", api_key=effective_key)
-
-    if provider == "simulated":
-        return SearchFactory.get_provider("simulated")
-
-    raise SystemExit(f"Unknown provider '{provider}'. Use 'google' or 'simulated'.")
+# _build_search_provider moved to services.shared.pipeline_runner
 
 
 
@@ -168,198 +137,66 @@ def execute_pipeline(
         If return_dict=True: {"success": bool, "run_id": str, "report": str, "error": str, "stats": {...}}
         If return_dict=False: int exit code (0=success, 1=failure)
     """
-    # Initialize logger with provided or generated run_id
-    run_logger = ResearchLogger("cli", run_id=run_id)
-    actual_run_id = run_logger.run_id
-    
-    def update_progress(stage: str, percent: float):
-        if progress_callback:
-            progress_callback(stage, percent)
-    
+    # Build search provider
     try:
-        if verbose:
-            console.print(f"[bold cyan][hdrp][/bold cyan] run_id={actual_run_id}")
-            console.print(f"[bold cyan][hdrp][/bold cyan] provider={provider or 'auto'}")
-        
-        update_progress("Initializing search provider", 10)
-        
-        # Log the query for dashboard visibility
-        run_logger.log("query_submitted", {"query": query, "provider": provider})
-        
-        # 1. Build search provider
-        try:
-            search_provider = _build_search_provider(provider, api_key)
-        except SystemExit:
-            # Re-raise to allow clean exit with message (CLI only)
-            if not return_dict:
-                raise
-            return {
-                "success": False,
-                "run_id": actual_run_id,
-                "report": "",
-                "error": f"Unknown provider '{provider}'",
-            }
-        except (SearchError, APIKeyError) as exc:
-            error_msg = f"Configuration Error: {exc}"
-            if not return_dict:
-                console.print(Panel.fit(
-                    f"[bold red]Configuration Error[/bold red]\\n\\n{exc}",
-                    border_style="red",
-                    title="[bold]HDRP Setup Required[/bold]",
-                ))
-                return 1
-            return {
-                "success": False,
-                "run_id": actual_run_id,
-                "report": "",
-                "error": error_msg,
-            }
-        except Exception as exc:
-            error_msg = f"Failed to initialize search provider: {exc}"
-            if not return_dict:
-                console.print(f"[bold red][hdrp][/bold red] {error_msg}")
-                return 1
-            return {
-                "success": False,
-                "run_id": actual_run_id,
-                "report": "",
-                "error": error_msg,
-            }
-        
-        update_progress("Initializing services", 20)
-        
-        # 2. Initialize services
-        researcher = ResearcherService(search_provider, run_id=actual_run_id)
-        critic = CriticService(run_id=actual_run_id)
-        synthesizer = SynthesizerService()
-        
-        if verbose:
-            console.print(f"[bold cyan][hdrp][/bold cyan] Researching: [italic]{query}[/italic]")
-        
-        update_progress(f"Researching: {query}", 30)
-        
-        # 3. Research
-        try:
-            claims = researcher.research(query, source_node_id="root_research")
-        except Exception as exc:
-            error_msg = f"Research failed: {exc}"
-            if not return_dict:
-                console.print(f"[bold red][hdrp][/bold red] {error_msg}")
-                return 1
-            return {
-                "success": False,
-                "run_id": actual_run_id,
-                "report": "",
-                "error": error_msg,
-            }
-        
-        if verbose:
-            console.print(f"[bold cyan][hdrp][/bold cyan] Retrieved {len(claims)} raw claims")
-        
-        if not claims:
-            no_results_msg = "No information found for this query."
-            if not return_dict:
-                console.print(f"[yellow]{no_results_msg}[/yellow]")
-                return 0
-            return {
-                "success": True,
-                "run_id": actual_run_id,
-                "report": no_results_msg,
-                "error": "",
-            }
-        
-        update_progress(f"Verifying {len(claims)} claims", 60)
-        
-        # 4. Critic: verify claims
-        critique_results = critic.verify(claims, task=query)
-        verified_count = sum(1 for r in critique_results if r.is_valid)
-        
-        if verbose:
-            rejected_count = len(critique_results) - verified_count
-            console.print(
-                f"[bold cyan][hdrp][/bold cyan] Verified={verified_count}, "
-                f"Rejected={rejected_count}"
-            )
-        
-        update_progress("Synthesizing final report", 80)
-        
-        # 5. Synthesize human-readable report
-        context = {
-            "report_title": f"HDRP Research Report: {query}",
-            "introduction": (
-                "This report was generated by the Hierarchical Deep Research Planner (HDRP) "
-                "pipeline using structured claims with explicit source traceability."
-            ),
+        search_provider = build_search_provider(provider, api_key)
+    except SystemExit:
+        # Re-raise to allow clean exit with message (CLI only)
+        if not return_dict:
+            raise
+        return {
+            "success": False,
+            "run_id": run_id or "",
+            "report": "",
+            "error": f"Unknown provider '{provider}'",
         }
-        report = synthesizer.synthesize(critique_results, context=context)
-        
-        update_progress("Saving report artifacts", 90)
-        
-        # 6. Save report artifacts to artifacts directory
-        try:
-            _save_report_artifacts(actual_run_id, query, report, claims, critique_results)
-            if verbose:
-                console.print(f"[bold cyan][hdrp][/bold cyan] Artifacts saved to artifacts/{actual_run_id}/")
-        except Exception as e:
-            if verbose:
-                console.print(f"[yellow][hdrp][/yellow] Warning: Failed to save artifacts: {e}")
-            run_logger.log("artifact_save_failed", {"error": str(e)})
-        
-        # 7. Output report
-        if output_path:
-            try:
-                with open(output_path, "w", encoding="utf-8") as f:
-                    f.write(report)
-                if verbose:
-                    console.print(
-                        Panel.fit(
-                            f"Report written to [bold]{output_path}[/bold]",
-                            border_style="green",
-                        )
-                    )
-            except OSError as exc:
-                error_msg = f"Failed to write report to {output_path}: {exc}"
-                if not return_dict:
-                    console.print(f"[bold red][hdrp][/bold red] {error_msg}")
-                    return 1
-                return {
-                    "success": False,
-                    "run_id": actual_run_id,
-                    "report": report,
-                    "error": error_msg,
-                }
-        elif not return_dict:
-            # Print to stdout as plain text (no Rich markup parsing) - CLI only
-            console.print(report, markup=False)
-        
-        update_progress("Completed", 100)
-        
-        # Return success
-        if return_dict:
-            return {
-                "success": True,
-                "run_id": actual_run_id,
-                "report": report,
-                "error": "",
-                "stats": {
-                    "total_claims": len(claims),
-                    "verified_claims": verified_count,
-                    "rejected_claims": len(critique_results) - verified_count,
-                }
-            }
-        return 0
-    
+    except (SearchError, APIKeyError) as exc:
+        error_msg = f"Configuration Error: {exc}"
+        if not return_dict:
+            console.print(Panel.fit(
+                f"[bold red]Configuration Error[/bold red]\\n\\n{exc}",
+                border_style="red",
+                title="[bold]HDRP Setup Required[/bold]",
+            ))
+            return 1
+        return {
+            "success": False,
+            "run_id": run_id or "",
+            "report": "",
+            "error": error_msg,
+        }
     except Exception as exc:
-        error_msg = f"Unexpected error: {exc}"
+        error_msg = f"Failed to initialize search provider: {exc}"
         if not return_dict:
             console.print(f"[bold red][hdrp][/bold red] {error_msg}")
             return 1
         return {
             "success": False,
-            "run_id": actual_run_id,
+            "run_id": run_id or "",
             "report": "",
             "error": error_msg,
         }
+    
+    # Use unified PipelineRunner
+    runner = PipelineRunner(
+        search_provider=search_provider,
+        run_id=run_id,
+        verbose=verbose,
+        progress_callback=progress_callback,
+    )
+    
+    result = runner.execute(query=query, output_path=output_path)
+    
+    # Handle CLI-specific output formatting
+    if not return_dict:
+        if not result["success"]:
+            return 1
+        if not output_path and result["report"]:
+            # Print to stdout as plain text (no Rich markup parsing) - CLI only
+            console.print(result["report"], markup=False)
+        return 0
+    
+    return result
 
 
 def _run_cli(
@@ -385,14 +222,22 @@ def _run_cli(
     )
 
     if mode.lower() == "orchestrator":
-        from HDRP.orchestrated_runner import run_orchestrated
-        exit_code = run_orchestrated(
-            query=query,
+        # Use unified OrchestratedPipelineRunner
+        runner = OrchestratedPipelineRunner(
             provider=provider or "",
             api_key=api_key,
-            output_path=output,
             verbose=verbose,
         )
+        result = runner.execute(query=query, output_path=output)
+        
+        # Print results for CLI
+        if not result["success"]:
+            console.print(f"[bold red]Error:[/bold red] {result['error']}")
+            exit_code = 1
+        else:
+            if not output and result["report"]:
+                console.print(result["report"], markup=False)
+            exit_code = 0
     else:
         exit_code = execute_pipeline(
             query=query,
