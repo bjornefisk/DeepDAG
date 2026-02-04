@@ -146,8 +146,8 @@ HDRP/logs/*
 checkpoints/
 HDRP/tools/train/checkpoints/
 *.weights
-HDRP/artifacts/*
-!HDRP/artifacts/.gitkeep
+**/artifacts/*
+!**/artifacts/.gitkeep
 
 # Temporary outputs
 results.json
@@ -173,5 +173,3 @@ venv/
 *.swp
 *.swo
 *~
-
-HDRP/artifacts
