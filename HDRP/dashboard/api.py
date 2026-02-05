@@ -9,9 +9,11 @@ Supports both Python-only and orchestrator execution modes.
 import threading
 import time
 import uuid
+import json
+import queue
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 from enum import Enum
 
 
@@ -70,6 +72,9 @@ class QueryExecutor:
         self._executions: Dict[str, ExecutionProgress] = {}
         self._lock = threading.Lock()
         self._cancel_flags: Dict[str, threading.Event] = {}
+        # SSE subscribers: run_id -> set of queues
+        self._subscribers: Dict[str, Set[queue.Queue]] = {}
+        self._subscriber_lock = threading.Lock()
     
     def execute_query(
         self,
@@ -244,13 +249,79 @@ class QueryExecutor:
         return result
     
     def _update_progress(self, run_id: str, **kwargs):
-        """Update execution progress (thread-safe)."""
+        """Update execution progress (thread-safe) and notify subscribers."""
         with self._lock:
             if run_id in self._executions:
                 progress = self._executions[run_id]
                 for key, value in kwargs.items():
                     if hasattr(progress, key):
                         setattr(progress, key, value)
+                
+                # Notify subscribers via SSE
+                self._notify_subscribers(run_id, progress.to_dict())
+    
+    def subscribe(self, run_id: str) -> queue.Queue:
+        """
+        Subscribe to progress updates for a specific run.
+        
+        Args:
+            run_id: Execution identifier
+            
+        Returns:
+            Queue that will receive progress updates as dictionaries
+        """
+        progress_queue = queue.Queue(maxsize=100)
+        
+        with self._subscriber_lock:
+            if run_id not in self._subscribers:
+                self._subscribers[run_id] = set()
+            self._subscribers[run_id].add(progress_queue)
+        
+        # Send current status immediately if available
+        current_status = self.get_status(run_id)
+        if current_status:
+            try:
+                progress_queue.put_nowait(current_status)
+            except queue.Full:
+                pass  # Skip if queue is full
+        
+        return progress_queue
+    
+    def unsubscribe(self, run_id: str, progress_queue: queue.Queue):
+        """
+        Unsubscribe from progress updates.
+        
+        Args:
+            run_id: Execution identifier
+            progress_queue: Queue to remove from subscribers
+        """
+        with self._subscriber_lock:
+            if run_id in self._subscribers:
+                self._subscribers[run_id].discard(progress_queue)
+                # Clean up empty subscriber sets
+                if not self._subscribers[run_id]:
+                    del self._subscribers[run_id]
+    
+    def _notify_subscribers(self, run_id: str, progress_data: Dict[str, Any]):
+        """
+        Notify all subscribers of progress update (thread-safe).
+        
+        Args:
+            run_id: Execution identifier
+            progress_data: Progress dictionary to send
+        """
+        with self._subscriber_lock:
+            subscribers = self._subscribers.get(run_id, set()).copy()
+        
+        # Send to all subscribers (non-blocking)
+        for subscriber_queue in subscribers:
+            try:
+                subscriber_queue.put_nowait(progress_data)
+            except queue.Full:
+                # Remove subscriber if queue is full (client might have disconnected)
+                with self._subscriber_lock:
+                    if run_id in self._subscribers:
+                        self._subscribers[run_id].discard(subscriber_queue)
     
     def get_status(self, run_id: str) -> Optional[Dict[str, Any]]:
         """

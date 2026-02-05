@@ -8,11 +8,12 @@ Run with: python -m HDRP.dashboard.app
 
 import os
 import sys
+import json
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from dash import Dash, html, dcc, callback, Output, Input, State, ctx, no_update
+from dash import Dash, html, dcc, callback, Output, Input, State, ctx, no_update, clientside_callback
 import dash
 
 from HDRP.dashboard.layout import create_layout
@@ -37,6 +38,84 @@ app = Dash(
 
 # Set the layout
 app.layout = create_layout()
+
+
+# Add SSE endpoint for progress streaming
+@app.server.route('/api/progress/<run_id>')
+def stream_progress(run_id: str):
+    """
+    Server-Sent Events endpoint for streaming execution progress.
+    
+    Usage in browser:
+        const eventSource = new EventSource('/api/progress/{run_id}');
+        eventSource.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            // Update UI with progress data
+        };
+    """
+    import queue
+    from flask import Response, stream_with_context
+    from HDRP.dashboard.api import get_executor
+    
+    executor = get_executor()
+    
+    # Check if run exists
+    status = executor.get_status(run_id)
+    if not status:
+        return Response(
+            json.dumps({"error": f"Run {run_id} not found"}),
+            status=404,
+            mimetype='application/json'
+        )
+    
+    # Subscribe to progress updates
+    progress_queue = executor.subscribe(run_id)
+    
+    def generate():
+        """Generate SSE events from progress queue."""
+        try:
+            while True:
+                try:
+                    # Wait for progress update (timeout to check if run is complete)
+                    progress_data = progress_queue.get(timeout=1.0)
+                    
+                    # Format as SSE message
+                    data = json.dumps(progress_data)
+                    yield f"data: {data}\n\n"
+                    
+                    # Stop streaming if execution is complete
+                    status = progress_data.get("status")
+                    if status in ["completed", "failed", "cancelled"]:
+                        break
+                        
+                except queue.Empty:
+                    # Check if execution is still running
+                    current_status = executor.get_status(run_id)
+                    if current_status:
+                        status = current_status.get("status")
+                        if status in ["completed", "failed", "cancelled"]:
+                            # Send final status before closing
+                            data = json.dumps(current_status)
+                            yield f"data: {data}\n\n"
+                            break
+                    # Continue waiting if still running
+                    yield ": heartbeat\n\n"  # Keep connection alive
+        except GeneratorExit:
+            pass
+        finally:
+            # Unsubscribe when client disconnects
+            executor.unsubscribe(run_id, progress_queue)
+    
+    response = Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',  # Disable buffering in nginx
+            'Connection': 'keep-alive',
+        }
+    )
+    return response
 
 
 # Page routing callback
@@ -271,24 +350,97 @@ def clear_query_form(n_clicks):
     return "", 10, False
 
 
+# Client-side callback for SSE connection
+# This sets up EventSource and periodically updates the store with latest progress
+clientside_callback(
+    """
+    function(runId, pollInterval) {
+        // Initialize window variables if needed
+        if (!window.hdrpSSEInitialized) {
+            window.hdrpSSEInitialized = true;
+            window.hdrpLatestProgress = null;
+            window.hdrpEventSource = null;
+        }
+        
+        if (!runId || runId === 'null' || runId === 'None') {
+            // Clean up
+            if (window.hdrpEventSource) {
+                window.hdrpEventSource.close();
+                window.hdrpEventSource = null;
+            }
+            window.hdrpLatestProgress = null;
+            return null;
+        }
+        
+        // Close existing connection if runId changed
+        if (window.hdrpEventSource) {
+            const currentUrl = window.hdrpEventSource.url;
+            const expectedUrl = `/api/progress/${runId}`;
+            if (!currentUrl.endsWith(expectedUrl)) {
+                window.hdrpEventSource.close();
+                window.hdrpEventSource = null;
+            }
+        }
+        
+        // Start SSE connection if not already connected
+        if (!window.hdrpEventSource && typeof EventSource !== 'undefined') {
+            const eventSource = new EventSource(`/api/progress/${runId}`);
+            window.hdrpEventSource = eventSource;
+            
+            // Store progress data when SSE messages arrive
+            eventSource.onmessage = function(event) {
+                try {
+                    const progressData = JSON.parse(event.data);
+                    window.hdrpLatestProgress = progressData;
+                } catch (e) {
+                    console.error('Error parsing SSE data:', e);
+                }
+            };
+            
+            eventSource.onerror = function(error) {
+                console.error('SSE connection error:', error);
+                if (window.hdrpEventSource) {
+                    window.hdrpEventSource.close();
+                    window.hdrpEventSource = null;
+                }
+            };
+        }
+        
+        // Return latest progress data (updated by EventSource onmessage)
+        // This callback is triggered by pollInterval input, so we check
+        // window.hdrpLatestProgress each time it runs
+        return window.hdrpLatestProgress || null;
+    }
+    """,
+    Output("sse-progress-data", "data"),
+    [Input("current-run-id", "data"), Input("status-poll-interval", "n_intervals")],
+    prevent_initial_call=False,
+)
+
+
 @callback(
     Output("query-output", "children"),
     Output("execution-status", "data", allow_duplicate=True),
     Output("status-poll-interval", "disabled", allow_duplicate=True),
     Output("cancel-query-btn", "style", allow_duplicate=True),
     Input("status-poll-interval", "n_intervals"),
+    Input("sse-progress-data", "data"),  # Also triggered by SSE updates
     State("current-run-id", "data"),
     prevent_initial_call=True,
 )
-def poll_execution_status(n_intervals, run_id):
-    """Poll execution status and update display."""
+def poll_execution_status(n_intervals, sse_data, run_id):
+    """Poll execution status and update display. Prefer SSE data when available."""
     if not run_id:
         return no_update, no_update, no_update, no_update
     
     from HDRP.dashboard.api import get_executor
     
-    executor = get_executor()
-    status_data = executor.get_status(run_id)
+    # Prefer SSE data if available, otherwise poll executor
+    if sse_data:
+        status_data = sse_data
+    else:
+        executor = get_executor()
+        status_data = executor.get_status(run_id)
     
     if not status_data:
         return "Execution not found.", {"status": "error"}, True, {"display": "none"}

@@ -230,8 +230,9 @@ def create_query_page():
         # Hidden state stores for execution tracking
         dcc.Store(id="execution-status", data=None),
         dcc.Store(id="current-run-id", data=None),
+        dcc.Store(id="sse-progress-data", data=None),  # Updated by SSE client-side
         
-        # Polling interval for status updates (disabled by default)
+        # Polling interval for status updates (disabled by default, used as fallback)
         dcc.Interval(
             id="status-poll-interval",
             interval=2000,  # 2 seconds
