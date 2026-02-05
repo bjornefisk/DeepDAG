@@ -80,22 +80,25 @@ python -m HDRP.services.critic.fastapi_server
 
 ### Installation
 
-**Create and activate a virtual environment** (recommended), then install dependencies:
+**Create and activate a virtual environment** (recommended), then install HDRP as a package:
 
 ```bash
 cd DeepDAG
 python -m venv .venv
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 
-# Install core dependencies from generated requirements.txt
-pip install -r requirements.txt
+# Install HDRP in editable mode (required for HDRP.* imports)
+pip install -e .
 
-# Or install from pyproject.toml with optional groups:
-# pip install -e .                    # Core only
+# Optional extras:
 # pip install -e .[dev]               # Core + dev tools
 # pip install -e .[dashboard]         # Core + dashboard/CLI
 # pip install -e .[testing]           # Core + testing utilities
 # pip install -e .[observability]     # Core + telemetry
+
+# If you use requirements.txt, still install HDRP afterward:
+# pip install -r requirements.txt
+# pip install -e . --no-deps
 ```
 
 **Regenerating requirements.txt** (when pyproject.toml changes):

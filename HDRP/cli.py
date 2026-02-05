@@ -8,13 +8,7 @@ providers (Google or simulated).
 """
 
 
-import sys
 from pathlib import Path
-
-# Add project root to sys.path to support HDRP.* imports
-root_dir = Path(__file__).resolve().parent.parent
-if str(root_dir) not in sys.path:
-    sys.path.insert(0, str(root_dir))
 
 import os
 import json

@@ -8,19 +8,6 @@ import grpc
 from concurrent import futures
 import logging
 import argparse
-import sys
-import os
-
-
-def setup_grpc_paths():
-    """Add project root and gRPC gen paths to sys.path for imports."""
-    root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
-    grpc_gen_path = os.path.join(root_path, "HDRP/api/gen/python")
-    
-    if root_path not in sys.path:
-        sys.path.insert(0, root_path)
-    if grpc_gen_path not in sys.path:
-        sys.path.insert(0, grpc_gen_path)
 
 
 def create_grpc_server(

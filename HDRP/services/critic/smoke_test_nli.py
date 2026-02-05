@@ -6,10 +6,6 @@ Tests basic functionality to verify the implementation is correct.
 """
 
 import sys
-from pathlib import Path
-
-# Add parent to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 print("=" * 60)
 print("NLI VERIFIER SMOKE TEST")

@@ -6,12 +6,6 @@ Dash-based web UI for monitoring HDRP research runs.
 Run with: python -m HDRP.dashboard.app
 """
 
-import os
-import sys
-
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 from dash import Dash, html, dcc, callback, Output, Input, State, ctx, no_update
 import dash
 

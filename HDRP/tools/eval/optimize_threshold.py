@@ -26,10 +26,6 @@ from pathlib import Path
 from typing import List, Dict, Tuple
 from dataclasses import dataclass, asdict
 
-# Add parent directory to path for imports
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
 from HDRP.services.critic.nli_verifier import NLIVerifier
 from HDRP.services.shared.claims import AtomicClaim
 from HDRP.tools.eval.test_queries import ALL_QUERIES

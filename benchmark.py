@@ -23,18 +23,13 @@ Examples:
 import argparse
 import json
 import statistics
-import sys
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
+import sys
 from typing import Dict, Iterable, List
-
-# Add project root to sys.path to support running as a script from root
-root_dir = Path(__file__).resolve().parent
-if str(root_dir) not in sys.path:
-    sys.path.insert(0, str(root_dir))
 
 from HDRP.services.critic.nli_verifier import NLIVerifier
 from HDRP.services.critic.service import CriticService

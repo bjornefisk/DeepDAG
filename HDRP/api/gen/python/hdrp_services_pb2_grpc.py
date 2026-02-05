@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-import hdrp_services_pb2 as hdrp__services__pb2
+from HDRP.api.gen.python import hdrp_services_pb2 as hdrp__services__pb2
 
 
 class PrincipalServiceStub(object):

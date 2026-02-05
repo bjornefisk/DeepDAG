@@ -7,9 +7,7 @@ Wraps CriticService with gRPC interface for claim verification.
 import grpc
 import logging
 
-# Setup paths before imports
-from HDRP.services.shared.grpc_base import setup_grpc_paths, run_server_main
-setup_grpc_paths()
+from HDRP.services.shared.grpc_base import run_server_main
 
 from HDRP.api.gen.python import hdrp_services_pb2
 from HDRP.api.gen.python import hdrp_services_pb2_grpc
