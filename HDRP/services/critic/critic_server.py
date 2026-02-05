@@ -11,8 +11,8 @@ import logging
 from HDRP.services.shared.grpc_base import setup_grpc_paths, run_server_main
 setup_grpc_paths()
 
-from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
-from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2_grpc
+from HDRP.api.gen.python import hdrp_services_pb2
+from HDRP.api.gen.python import hdrp_services_pb2_grpc
 from HDRP.services.critic.service import CriticService
 from HDRP.services.critic.nli_http_client import NLIHttpClient
 from HDRP.services.shared.claims import AtomicClaim

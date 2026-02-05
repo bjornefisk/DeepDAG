@@ -12,7 +12,7 @@ import os
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 
-from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
+from HDRP.api.gen.python import hdrp_services_pb2
 from HDRP.services.principal.prompts import build_decomposition_prompt
 from HDRP.services.shared.logger import ResearchLogger
 from HDRP.services.shared.errors import PrincipalError, report_error

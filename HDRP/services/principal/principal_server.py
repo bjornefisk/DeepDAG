@@ -12,8 +12,8 @@ from typing import Optional
 from HDRP.services.shared.grpc_base import setup_grpc_paths, run_server_main
 setup_grpc_paths()
 
-from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2
-from HDRP.api.gen.python.HDRP.api.proto import hdrp_services_pb2_grpc
+from HDRP.api.gen.python import hdrp_services_pb2
+from HDRP.api.gen.python import hdrp_services_pb2_grpc
 from HDRP.services.principal.service import PrincipalService
 from HDRP.services.shared.logger import ResearchLogger
 
