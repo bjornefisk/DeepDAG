@@ -47,7 +47,7 @@ documenting class indices.
 ## 3) Benchmark against the baseline
 
 ```bash
-python HDRP/tools/eval/benchmark_scifact_nli.py \
+python benchmark.py scifact \
   --test-file artifacts/scifact_nli/test.jsonl \
   --baseline-model cross-encoder/nli-deberta-v3-base \
   --tuned-model artifacts/nli_scifact \

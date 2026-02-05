@@ -34,7 +34,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           mkdir -p artifacts/benchmark
-          python HDRP/benchmark.py \
+          python benchmark.py pipeline \
             --queries 5 \
             --provider simulated \
             --output artifacts/benchmark/benchmark.json

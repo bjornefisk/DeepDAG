@@ -124,7 +124,7 @@ docker compose -f HDRP/tests/integration/docker-compose.test.yml up --build --ab
 - **Performance benchmark** (report-only by default):
 
 ```bash
-python HDRP/benchmark.py --queries 5 --provider simulated --output artifacts/benchmark/benchmark.json
+python benchmark.py pipeline --queries 5 --provider simulated --output artifacts/benchmark/benchmark.json
 ```
 
 ### CI workflows
@@ -240,7 +240,7 @@ The Critic uses a cross-encoder NLI model for claim verification. You can
 fine-tune it on SciFact and switch models via configuration.
 
 - Prep SciFact JSONL and train a model using the scripts in `HDRP/tools/train/`.
-- Benchmark against the baseline using `HDRP/tools/eval/benchmark_scifact_nli.py`.
+- Benchmark against the baseline using `python benchmark.py scifact`.
 - Switch the model with `HDRP_NLI_MODEL_NAME` (or update `nli.model_name` in config).
 
 See `HDRP/tools/train/README.md` for full instructions.
